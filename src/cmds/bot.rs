@@ -300,7 +300,10 @@ pub async fn start() {
     const POSTGRES_MAX_CONNECTIONS: u32 = 70; // max connections to the database, we don't need too many here
 
     // Setup logging
-    let cmd_args = Arc::new(CmdArgs::parse());
+    let mut env_args = std::env::args().collect::<Vec<String>>();
+    env_args.remove(1);
+
+    let cmd_args = Arc::new(CmdArgs::parse_from(env_args));
 
     let debug_mode = std::env::var("DEBUG").unwrap_or_default() == "true";
     let debug_opts = std::env::var("DEBUG_OPTS").unwrap_or_default();
