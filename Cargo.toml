@@ -21,7 +21,7 @@ indexmap = { version = "2", features = ["serde"] }
 bot_modules_default = { path = "./crates/rust.bot_modules_default" }
 bot_binutils = { path = "../../core/rust/rust.binutils" }
 rust_rpc_server = { path = "../../core/rust/rust.rpc_server" }
-rust_rpc_server_bot = { path = "../../core/rust/rust.rpc_server.bot" }
+rust_rpc_server_bot = { path = "./crates/rust.rpc_server.bot" }
 gwevent = { path = "../../core/rust/rust.gwevent" }
 config = { path = "../../core/rust/rust.config" }
 silverpelt = { path = "../../core/rust/rust.silverpelt" }
