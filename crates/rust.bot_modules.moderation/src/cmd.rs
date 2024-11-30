@@ -50,7 +50,7 @@ type MessagePruneOpts struct {
 
 #[allow(clippy::too_many_arguments)]
 fn create_message_prune_serde(
-    user_id: UserId,
+    user_id: Option<UserId>,
     guild_id: GuildId,
     channels: &Option<String>,
     ignore_errors: Option<bool>,
@@ -84,7 +84,7 @@ fn create_message_prune_serde(
         {
             "ServerID": guild_id.to_string(),
             "Options": {
-                "UserID": user_id.to_string(),
+                "UserID": user_id,
                 "Channels": channels,
                 "IgnoreErrors": ignore_errors.unwrap_or(false),
                 "MaxMessages": max_messages.unwrap_or(1000),
@@ -147,7 +147,7 @@ async fn check_hierarchy(ctx: &Context<'_>, user_id: UserId) -> Result<(), Error
     }
 }
 
-/// Prune messages from a user
+/// Customizable pruning of messages
 #[poise::command(
     slash_command,
     guild_only,
@@ -155,12 +155,12 @@ async fn check_hierarchy(ctx: &Context<'_>, user_id: UserId) -> Result<(), Error
     required_bot_permissions = "KICK_MEMBERS | MANAGE_MESSAGES"
 )]
 #[allow(clippy::too_many_arguments)]
-pub async fn prune_user(
+pub async fn prune(
     ctx: Context<'_>,
-    #[description = "The user to prune"] user: serenity::all::User,
     #[description = "The reason for the prune"]
     #[max_length = 512]
     reason: String,
+    #[description = "The user to prune messages of"] user: Option<serenity::all::User>,
     #[description = "Number of stings to give. Defaults to configured base stings"] stings: Option<
         i32,
     >,
@@ -190,14 +190,15 @@ pub async fn prune_user(
     };
 
     // Check user hierarchy before performing moderative actions
-    check_hierarchy(&ctx, user.id).await?;
+    if let Some(ref user) = user {
+        check_hierarchy(&ctx, user.id).await?;
+    }
 
     let mut embed = CreateEmbed::new()
-        .title("Pruning User Messages...")
+        .title("Pruning Messages...")
         .description(format!(
-            "{} | Pruning User Messages {}",
+            "{} | Pruning User Messages",
             get_icon_of_state("pending"),
-            user.mention()
         ));
 
     let base_message = ctx.send(CreateReply::new().embed(embed)).await?;
@@ -226,7 +227,10 @@ pub async fn prune_user(
                 void_reason: None,
                 guild_id,
                 creator: silverpelt::stings::StingTarget::User(author.user.id),
-                target: silverpelt::stings::StingTarget::User(user.id),
+                target: match user {
+                    Some(ref user) => silverpelt::stings::StingTarget::User(user.id),
+                    None => silverpelt::stings::StingTarget::System,
+                },
                 state: silverpelt::stings::StingState::Active,
                 duration: None,
                 sting_data: None,
@@ -238,7 +242,10 @@ pub async fn prune_user(
 
     // If we're pruning messages, do that
     let prune_opts = create_message_prune_serde(
-        user.id,
+        match user {
+            Some(ref user) => Some(user.id),
+            None => None,
+        },
         guild_id,
         &prune_channels,
         prune_ignore_errors,
@@ -281,7 +288,10 @@ pub async fn prune_user(
             event_name: "AR/PruneUser".to_string(),
             event_titlename: "(Anti-Raid) Prune User".to_string(),
             event_data: serde_json::json!({
-                "log": to_log_format(&author.user, &user, &reason),
+                "log": match user {
+                    Some(user) => to_log_format(&author.user, &user, &reason),
+                    None => format!("{} | Pruning messages for all users", username(&author.user)),
+                },
                 "prune_opts": prune_opts,
                 "channels": if let Some(ref channels) = prune_channels {
                     parse_numeric_list_to_str::<ChannelId>(channels, &REPLACE_CHANNEL)?
@@ -336,9 +346,8 @@ pub async fn prune_user(
                     vec![CreateEmbed::default()
                         .title("Pruning User Messages...")
                         .description(format!(
-                            "{} | Pruning User Messages {}",
+                            "{} | Pruning User Messages",
                             get_icon_of_state(&job.state),
-                            user.mention()
                         ))],
                     prune_debug.unwrap_or(false),
                 )?;

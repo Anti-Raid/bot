@@ -26,11 +26,11 @@ impl silverpelt::module::Module for Module {
     fn raw_commands(&self) -> Vec<silverpelt::module::CommandObj> {
         vec![
             (
-                cmd::prune_user(),
+                cmd::prune(),
                 indexmap! {
                     "" => CommandExtendedData {
                         default_perms: PermissionCheck {
-                            kittycat_perms: vec!["moderation.prune_user".to_string()],
+                            kittycat_perms: vec!["moderation.prune".to_string()],
                             native_perms: vec![serenity::model::permissions::Permissions::MANAGE_MESSAGES, serenity::model::permissions::Permissions::MANAGE_GUILD],
                             inner_and: true,
                         },
