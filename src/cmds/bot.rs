@@ -10,6 +10,7 @@ use serenity::all::{FullEvent, HttpBuilder};
 use silverpelt::{data::Data, Error};
 use sqlx::postgres::PgPoolOptions;
 use std::io::Write;
+use std::sync::Once;
 
 #[derive(Parser, Debug, Clone)]
 pub struct CmdArgs {
@@ -24,16 +25,14 @@ pub fn modules() -> Vec<Box<dyn modules::Module>> {
 }
 
 pub struct ConnectState {
-    pub started_tasks: std::sync::atomic::AtomicBool,
     pub ready: dashmap::DashMap<serenity::all::ShardId, bool>,
-    pub ready_lock: tokio::sync::Mutex<()>,
 }
 
 pub static CONNECT_STATE: LazyLock<ConnectState> = LazyLock::new(|| ConnectState {
-    started_tasks: std::sync::atomic::AtomicBool::new(false),
     ready: dashmap::DashMap::new(),
-    ready_lock: tokio::sync::Mutex::new(()),
 });
+
+static START_RPC: Once = Once::new();
 
 /// Props
 pub struct Props {
@@ -162,8 +161,6 @@ async fn event_listener<'a>(
             info!("Interaction received: {:?}", interaction.id());
         }
         FullEvent::Ready { data_about_bot } => {
-            let _lock = CONNECT_STATE.ready_lock.lock().await; // Lock to ensure that we don't have multiple ready events at the same time
-
             info!(
                 "{} is ready on shard {}",
                 data_about_bot.user.name, ctx.serenity_context.shard_id
@@ -184,16 +181,14 @@ async fn event_listener<'a>(
             drop(guard);
 
             // We don't really care which shard runs this, we just need one to run it
-            if !CONNECT_STATE
-                .started_tasks
-                .load(std::sync::atomic::Ordering::SeqCst)
-            {
+            //let data = ctx.serenity_context.data::<Data>();
+            //let serenity_context = ctx.serenity_context.clone();
+            START_RPC.call_once(|| {
                 info!("Starting IPC");
                 let data = ctx.serenity_context.data::<Data>();
                 let serenity_context = ctx.serenity_context.clone();
 
                 // Create a new rpc server
-                // Start the rpc server
                 tokio::task::spawn(async move {
                     log::info!("Starting RPC server");
 
@@ -210,27 +205,13 @@ async fn event_listener<'a>(
 
                     rust_rpc_server::start_rpc_server(opts, rpc_server).await;
                 });
-
-                CONNECT_STATE
-                    .started_tasks
-                    .store(true, std::sync::atomic::Ordering::SeqCst);
-            }
+            });
 
             CONNECT_STATE
                 .ready
                 .insert(ctx.serenity_context.shard_id, true);
-
-            drop(_lock);
         }
         _ => {}
-    }
-
-    // Ignore all other events if the bot is not ready
-    if !CONNECT_STATE
-        .ready
-        .contains_key(&ctx.serenity_context.shard_id)
-    {
-        return Ok(());
     }
 
     Ok(())
