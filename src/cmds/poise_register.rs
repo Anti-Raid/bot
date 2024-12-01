@@ -5,7 +5,7 @@ use serenity::all::{FullEvent, HttpBuilder};
 use std::io::Write;
 use std::sync::Arc;
 
-pub fn modules() -> Vec<Box<dyn silverpelt::module::Module>> {
+pub fn modules() -> Vec<Box<dyn modules::modules::Module>> {
     bot_modules_default::modules()
 }
 
@@ -74,17 +74,17 @@ pub async fn register_poise_commands() {
 
     info!("Registering poise commands");
 
-    let silverpelt_cache = {
-        let mut silverpelt_cache = silverpelt::cache::SilverpeltCache::default();
+    let modules_cache = {
+        let mut modules_cache = modules::cache::ModuleCache::default();
 
         for module in modules() {
-            silverpelt_cache.add_module(module);
+            modules_cache.add_module(module);
         }
 
-        Arc::new(silverpelt_cache)
+        Arc::new(modules_cache)
     };
 
-    let commands = bot_binutils::get_commands(&silverpelt_cache);
+    let commands = crate::binutils::get_commands(&modules_cache);
 
     let http = Arc::new(
         HttpBuilder::new(&config::CONFIG.discord_auth.token)

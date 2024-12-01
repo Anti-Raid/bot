@@ -104,7 +104,7 @@ pub async fn test_serenity() {
             })
         },
         commands: vec![],
-        command_check: Some(|ctx| Box::pin(bot_binutils::command_check(ctx))),
+        command_check: Some(|ctx| Box::pin(crate::binutils::command_check(ctx))),
         pre_command: |ctx| {
             Box::pin(async move {
                 info!(
@@ -125,7 +125,7 @@ pub async fn test_serenity() {
                 );
             })
         },
-        on_error: |error| Box::pin(bot_binutils::on_error(error)),
+        on_error: |error| Box::pin(crate::binutils::on_error(error)),
         ..Default::default()
     };
 

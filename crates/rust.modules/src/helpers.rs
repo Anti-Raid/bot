@@ -27,7 +27,6 @@ pub fn module_cache(data: &Data) -> Arc<crate::cache::ModuleCache> {
     data.props
         .slot()
         .expect("ModuleCache not initialized")
-        .downcast_ref::<Arc<crate::cache::ModuleCache>>()
+        .downcast::<crate::cache::ModuleCache>()
         .expect("ModuleCache not initialized")
-        .clone()
 }

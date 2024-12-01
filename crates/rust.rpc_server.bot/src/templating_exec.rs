@@ -15,8 +15,9 @@ pub(crate) async fn execute_template(
     Path((guild_id, user_id)): Path<(serenity::all::GuildId, serenity::all::UserId)>,
     Json(req): Json<crate::types::ExecuteTemplateRequest>,
 ) -> Json<ExecuteTemplateResponse> {
-    let perm_res = permission_checks::check_command(
-        &data.silverpelt_cache,
+    let modules_cache = modules::module_cache(&data);
+    let perm_res = modules::permission_checks::check_command(
+        &modules_cache,
         "exec_template",
         guild_id,
         user_id,
@@ -24,7 +25,7 @@ pub(crate) async fn execute_template(
         &serenity_context,
         &data.reqwest,
         &None,
-        permission_checks::CheckCommandOptions::default(),
+        modules::permission_checks::CheckCommandOptions::default(),
     )
     .await;
 
@@ -32,25 +33,18 @@ pub(crate) async fn execute_template(
         return Json(ExecuteTemplateResponse::PermissionError { res: perm_res });
     }
 
-    let resp = templating::execute::<Option<serde_json::Value>>(
-        guild_id,
-        templating::Template::Raw(req.template),
-        data.pool.clone(),
-        serenity_context.clone(),
-        data.reqwest.clone(),
-        templating::event::Event::new(
-            "(Anti-Raid) Template Execution".to_string(),
-            "AR/Virtual_ExecTemplate".to_string(),
-            "AR/Virtual_ExecTemplate".to_string(),
-            templating::event::ArcOrNormal::Normal(req.args),
-            false,
-            Some(user_id.to_string()),
-        ),
-    )
+    let resp = silverpelt::ar_event::AntiraidEvent::Custom(silverpelt::ar_event::CustomEvent {
+        event_titlename: "(Anti-Raid) Evaluate Template".to_string(),
+        event_name: "AR/Virtual_ExecTemplate".to_string(),
+        event_data: req.args,
+    })
+    .dispatch_to_template_worker(&data, guild_id)
     .await;
 
     match resp {
-        Ok(reply) => Json(ExecuteTemplateResponse::Ok { result: reply }),
+        Ok(reply) => Json(ExecuteTemplateResponse::Ok {
+            result: Some(reply),
+        }),
         Err(e) => Json(ExecuteTemplateResponse::ExecErr {
             error: e.to_string(),
         }),

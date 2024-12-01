@@ -1,6 +1,7 @@
 use std::num::NonZeroU16;
 
 use poise::{serenity_prelude::CreateEmbed, CreateReply};
+use sandwich_driver::GetStatusResponse;
 use serenity::builder::EditMessage;
 
 type Error = silverpelt::Error;
@@ -27,35 +28,29 @@ pub async fn ping(ctx: Context<'_>) -> Result<(), Error> {
     let new_st = std::time::Instant::now();
 
     let real_ws_latency = {
-        let sandwich_resp_guard = crate::tasks::SANDWICH_STATUS.read().await;
-        if let Some(sandwich_resp) = &*sandwich_resp_guard {
-            // Due to Sandwich Virtual Sharding etc, we need to reshard the guild id
-            let sid = {
-                if let Some(guild_id) = ctx.guild_id() {
-                    serenity::utils::shard_id(
-                        guild_id,
-                        NonZeroU16::new(sandwich_resp.shard_conns.len().try_into()?)
-                            .unwrap_or(NonZeroU16::new(1).unwrap()),
-                    )
-                } else {
-                    0 // DMs etc. go to shard 0
-                }
-            };
+        let sandwich_resp = get_sandwich_status(&ctx.data()).await?;
+        // Due to Sandwich Virtual Sharding etc, we need to reshard the guild id
+        let sid = {
+            if let Some(guild_id) = ctx.guild_id() {
+                serenity::utils::shard_id(
+                    guild_id,
+                    NonZeroU16::new(sandwich_resp.shard_conns.len().try_into()?)
+                        .unwrap_or(NonZeroU16::new(1).unwrap()),
+                )
+            } else {
+                0 // DMs etc. go to shard 0
+            }
+        };
 
-            // Convert u16 to i64
-            let sid = sid as i64;
+        // Convert u16 to i64
+        let sid = sid as i64;
 
-            let real_latency = sandwich_resp
-                .shard_conns
-                .get(&sid)
-                .map(|sc| sc.real_latency);
+        let real_latency = sandwich_resp
+            .shard_conns
+            .get(&sid)
+            .map(|sc| sc.real_latency);
 
-            drop(sandwich_resp_guard);
-
-            real_latency
-        } else {
-            None
-        }
+        real_latency
     };
 
     msg.edit(
@@ -85,4 +80,16 @@ pub async fn ping(ctx: Context<'_>) -> Result<(), Error> {
     .await?;
 
     Ok(())
+}
+
+pub async fn get_sandwich_status(
+    data: &silverpelt::data::Data,
+) -> Result<GetStatusResponse, silverpelt::Error> {
+    let status = sandwich_driver::get_status(&data.reqwest).await?;
+
+    if status.shard_conns.len() > data.props.shard_count().await?.into() {
+        return Err("Sandwich API returned more shards than the bot has".into());
+    }
+
+    Ok(status)
 }

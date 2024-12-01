@@ -1,7 +1,7 @@
+use modules::types::{GuildCommandConfiguration, GuildModuleConfiguration};
 use permissions::types::PermissionResult;
 use serde::{Deserialize, Serialize};
 use serenity::all::{GuildChannel, Permissions, Role, RoleId};
-use silverpelt::types::{GuildCommandConfiguration, GuildModuleConfiguration};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct GuildChannelWithPermissions {

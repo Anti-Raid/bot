@@ -18,8 +18,8 @@ serde_json = "1.0"
 indexmap = { version = "2", features = ["serde"] }
 
 # Modules
+modules = { path = "./crates/rust.modules" }
 bot_modules_default = { path = "./crates/rust.bot_modules_default" }
-bot_binutils = { path = "../../core/rust/rust.binutils" }
 rust_rpc_server = { path = "../../core/rust/rust.rpc_server" }
 rust_rpc_server_bot = { path = "./crates/rust.rpc_server.bot" }
 gwevent = { path = "../../core/rust/rust.gwevent" }

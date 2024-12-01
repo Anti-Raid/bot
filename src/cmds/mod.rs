@@ -1,5 +1,4 @@
 mod bot;
-mod docgen;
 mod poise_register;
 mod serenity_test;
 mod tester;
@@ -80,11 +79,6 @@ pub async fn cmd_loader() {
         Some("test") => {
             tester::run_tester().await;
         }
-        Some("templatedocs") => {
-            let docs = docgen::create_documentation();
-
-            println!("{}", docs)
-        }
         Some("serenity.test") => {
             serenity_test::test_serenity().await;
         }
@@ -95,7 +89,7 @@ pub async fn cmd_loader() {
             bot::start().await;
         }
         _ => {
-            println!("No/unknown command specified.\n\ngenassets: [generate build assets]\ntest [test bot with some sanity checks]\ntemplatedocs: [generate template docs]\nserenity.test: [test serenity library]\npoise.register: [register poise commands]\nbot: [start bot]");
+            println!("No/unknown command specified.\n\ngenassets: [generate build assets]\ntest [test bot with some sanity checks]\nnserenity.test: [test serenity library]\npoise.register: [register poise commands]\nbot: [start bot]");
         }
     }
 }

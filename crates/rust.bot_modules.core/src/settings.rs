@@ -1282,8 +1282,8 @@ pub struct GuildTemplateExecutor;
 impl GuildTemplateExecutor {
     async fn validate<'a>(&self, ctx: &HookContext<'a>, name: &str) -> Result<(), SettingsError> {
         if name.starts_with("$shop/") {
-            let (shop_tname, shop_tversion) =
-                templating::parse_shop_template(name).map_err(|e| SettingsError::Generic {
+            let (shop_tname, shop_tversion) = silverpelt::templates::parse_shop_template(name)
+                .map_err(|e| SettingsError::Generic {
                     message: format!("Failed to parse shop template: {:?}", e),
                     src: "guild_templates->name".to_string(),
                     typ: "external".to_string(),
@@ -1319,31 +1319,15 @@ impl GuildTemplateExecutor {
         ctx: &HookContext<'a>,
         name: &str,
     ) -> Result<(), SettingsError> {
-        templating::cache::clear_cache(ctx.guild_id).await;
-
         // Dispatch a OnStartup event for the template
-        silverpelt::ar_event::dispatch_event_to_modules(
-            &silverpelt::ar_event::EventHandlerContext {
-                guild_id: ctx.guild_id,
-                data: modules::get_data(ctx.data),
-                event: silverpelt::ar_event::AntiraidEvent::OnStartup(vec![name.to_string()]),
-                serenity_context: ctx.data.serenity_context.clone(),
-            },
-        )
-        .await
-        .map_err(|e| SettingsError::Generic {
-            message: format!("Failed to dispatch OnStartup event: {}", {
-                let mut strs = String::new();
-
-                for err in e {
-                    strs.push_str(&format!("{}\n", err));
-                }
-
-                strs
-            }),
-            src: "GuildTemplateExecutor".to_string(),
-            typ: "internal".to_string(),
-        })?;
+        silverpelt::ar_event::AntiraidEvent::OnStartup(vec![name.to_string()])
+            .dispatch_to_template_worker(&modules::get_data(ctx.data), ctx.guild_id)
+            .await
+            .map_err(|e| SettingsError::Generic {
+                message: format!("Failed to dispatch OnStartup event: {:?}", e),
+                src: "GuildTemplateExecutor".to_string(),
+                typ: "internal".to_string(),
+            })?;
 
         Ok(())
     }
@@ -1632,7 +1616,7 @@ pub static GUILD_TEMPLATES_KV: LazyLock<Setting> = LazyLock::new(|| Setting {
             column_type: ColumnType::new_scalar(InnerColumnType::String {
                 kind: InnerColumnTypeStringKind::Normal {},
                 min_length: None,
-                max_length: Some(templating::LuaKVConstraints::default().max_key_length),
+                max_length: Some(silverpelt::templates::LuaKVConstraints::default().max_key_length),
                 allowed_values: vec![],
             }),
             nullable: false,
@@ -1645,7 +1629,7 @@ pub static GUILD_TEMPLATES_KV: LazyLock<Setting> = LazyLock::new(|| Setting {
             name: "Content".to_string(),
             description: "The content of the template".to_string(),
             column_type: ColumnType::new_scalar(InnerColumnType::Json {
-                max_bytes: Some(templating::LuaKVConstraints::default().max_value_bytes),
+                max_bytes: Some(silverpelt::templates::LuaKVConstraints::default().max_value_bytes),
             }),
             nullable: true,
             suggestions: ColumnSuggestion::None {},
@@ -1712,6 +1696,37 @@ impl SettingCreator for GuildTemplatesKVExecutor {
                 src: "GuildTemplatesKVExecutor".to_string(),
             });
         };
+
+        let total_count = sqlx::query!(
+            "SELECT COUNT(*) FROM guild_templates_kv WHERE guild_id = $1",
+            ctx.guild_id.to_string()
+        )
+        .fetch_one(&ctx.data.pool)
+        .await
+        .map_err(|e| SettingsError::Generic {
+            message: format!("Failed to check total kv count: {:?}", e),
+            src: "GuildTemplatesKVExecutor".to_string(),
+            typ: "internal".to_string(),
+        })?
+        .count
+        .unwrap_or_default();
+
+        if total_count
+            >= silverpelt::templates::LuaKVConstraints::default()
+                .max_keys
+                .try_into()
+                .map_err(|_| SettingsError::Generic {
+                    message: "Failed to convert max_keys to i64".to_string(),
+                    src: "GuildTemplatesKVExecutor".to_string(),
+                    typ: "internal".to_string(),
+                })?
+        {
+            return Err(SettingsError::Generic {
+                message: "Max key-value pairs reached".to_string(),
+                src: "GuildTemplatesKVExecutor".to_string(),
+                typ: "internal".to_string(),
+            });
+        }
 
         let count = sqlx::query!(
             "SELECT COUNT(*) FROM guild_templates_kv WHERE guild_id = $1 AND key = $2",

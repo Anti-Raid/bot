@@ -21,13 +21,14 @@ pub(crate) async fn settings_operation(
     // Find the setting
     let mut setting = None;
 
-    if let Some(module_setting) = data.silverpelt_cache.settings_cache.get(&req.setting) {
+    let modules_cache = modules::module_cache(&data);
+    if let Some(module_setting) = modules_cache.settings_cache.get(&req.setting) {
         setting = Some(module_setting.clone());
     };
 
-    if let Some(page_setting) = templating::cache::get_setting(guild_id, &req.setting).await {
-        setting = Some(page_setting);
-    };
+    //if let Some(page_setting) = templating::cache::get_setting(guild_id, &req.setting).await {
+    //    setting = Some(page_setting);
+    //};
 
     let Some(setting) = setting else {
         return Json(CanonicalSettingsResult::Err {
@@ -43,7 +44,7 @@ pub(crate) async fn settings_operation(
         OperationType::View => {
             match ar_settings::cfg::settings_view(
                 &setting,
-                &data.settings_data(serenity_context),
+                &modules::settings_data(&data, serenity_context),
                 guild_id,
                 user_id,
                 req.fields,
@@ -57,7 +58,7 @@ pub(crate) async fn settings_operation(
         OperationType::Create => {
             match ar_settings::cfg::settings_create(
                 &setting,
-                &data.settings_data(serenity_context),
+                &modules::settings_data(&data, serenity_context),
                 guild_id,
                 user_id,
                 req.fields,
@@ -71,7 +72,7 @@ pub(crate) async fn settings_operation(
         OperationType::Update => {
             match ar_settings::cfg::settings_update(
                 &setting,
-                &data.settings_data(serenity_context),
+                &modules::settings_data(&data, serenity_context),
                 guild_id,
                 user_id,
                 req.fields,
@@ -94,7 +95,7 @@ pub(crate) async fn settings_operation(
 
             match ar_settings::cfg::settings_delete(
                 &setting,
-                &data.settings_data(serenity_context),
+                &modules::settings_data(&data, serenity_context),
                 guild_id,
                 user_id,
                 pkey.clone(),

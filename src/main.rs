@@ -1,3 +1,4 @@
+mod binutils;
 mod cmds;
 
 #[tokio::main]

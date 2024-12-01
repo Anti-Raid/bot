@@ -4,7 +4,6 @@ mod modules;
 mod ping;
 mod settings;
 mod stats;
-mod tasks;
 mod web;
 mod whois;
 

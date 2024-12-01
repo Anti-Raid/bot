@@ -56,10 +56,11 @@ pub fn create_bot_rpc_server(
 /// Returns a list of modules [Modules]
 async fn modules(
     State(AppData { data, .. }): State<AppData>,
-) -> Json<Vec<silverpelt::canonical_module::CanonicalModule>> {
+) -> Json<Vec<modules::canonical::CanonicalModule>> {
     let mut modules = Vec::new();
 
-    for idm in data.silverpelt_cache.canonical_module_cache.iter() {
+    let modules_cache = modules::module_cache(&data);
+    for idm in modules_cache.canonical_module_cache.iter() {
         let module = idm.value();
         modules.push(module.clone());
     }
@@ -188,8 +189,9 @@ async fn check_command_permission(
 
     let flags = crate::types::RpcCheckCommandOptionsFlags::from_bits_truncate(opts.flags);
 
-    let perm_res = permission_checks::check_command(
-        &data.silverpelt_cache,
+    let modules_cache = modules::module_cache(&data);
+    let perm_res = modules::permission_checks::check_command(
+        &modules_cache,
         &req.command,
         guild_id,
         user_id,
@@ -197,7 +199,7 @@ async fn check_command_permission(
         &serenity_context,
         &data.reqwest,
         &None,
-        permission_checks::CheckCommandOptions {
+        modules::permission_checks::CheckCommandOptions {
             ignore_module_disabled: flags
                 .contains(crate::types::RpcCheckCommandOptionsFlags::IGNORE_MODULE_DISABLED),
             ignore_command_disabled: flags
@@ -244,17 +246,18 @@ async fn clear_modules_enabled_cache(
     State(AppData { data, .. }): State<AppData>,
     Json(req): Json<crate::types::ClearModulesEnabledCacheRequest>,
 ) -> Response<crate::types::ClearModulesEnabledCacheResponse> {
+    let modules_cache = modules::module_cache(&data);
     if let Some(guild_id) = req.guild_id {
         if let Some(module) = req.module {
-            data.silverpelt_cache
+            modules_cache
                 .module_enabled_cache
                 .invalidate(&(guild_id, module))
                 .await;
         } else {
             // Global enable/disable the module by iterating the entire cache
-            for (k, _) in data.silverpelt_cache.module_enabled_cache.iter() {
+            for (k, _) in modules_cache.module_enabled_cache.iter() {
                 if k.0 == guild_id {
-                    data.silverpelt_cache
+                    modules_cache
                         .module_enabled_cache
                         .invalidate(&(k.0, k.1.clone()))
                         .await;
@@ -262,7 +265,7 @@ async fn clear_modules_enabled_cache(
             }
         }
     } else {
-        data.silverpelt_cache.module_enabled_cache.invalidate_all()
+        modules_cache.module_enabled_cache.invalidate_all()
     }
 
     Ok(Json(crate::types::ClearModulesEnabledCacheResponse {}))

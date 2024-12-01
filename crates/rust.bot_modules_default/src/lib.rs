@@ -1,4 +1,4 @@
-use silverpelt::module::Module;
+use modules::modules::Module;
 
 /// List of modules to load
 pub fn modules() -> Vec<Box<dyn Module>> {
@@ -7,6 +7,5 @@ pub fn modules() -> Vec<Box<dyn Module>> {
         Box::new(bot_modules_lockdown::Module),
         Box::new(bot_modules_moderation::Module),
         Box::new(bot_modules_server_backups::Module),
-        Box::new(bot_modules_temporary_punishments::Module),
     ]
 }

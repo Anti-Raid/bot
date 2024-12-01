@@ -1,6 +1,4 @@
 use botox::cache::CacheHttpImpl;
-use gwevent::core::get_event_guild_id;
-use silverpelt::ar_event::{AntiraidEvent, EventHandlerContext};
 
 use std::sync::{Arc, LazyLock};
 use std::time::Duration;
@@ -42,6 +40,7 @@ pub struct Props {
     pub cmd_args: Arc<CmdArgs>,
     pub cache_http: Arc<RwLock<Option<CacheHttpImpl>>>,
     pub shard_manager: Arc<RwLock<Option<Arc<serenity::all::ShardManager>>>>,
+    pub module_cache: Arc<modules::cache::ModuleCache>,
 }
 
 #[async_trait::async_trait]
@@ -49,6 +48,10 @@ impl silverpelt::data::Props for Props {
     /// Converts the props to std::any::Any
     fn as_any(&self) -> &(dyn std::any::Any + Send + Sync) {
         self
+    }
+
+    fn slot(&self) -> Option<Arc<dyn std::any::Any + Send + Sync>> {
+        Some(self.module_cache.clone())
     }
 
     fn extra_description(&self) -> String {
@@ -185,14 +188,6 @@ async fn event_listener<'a>(
                 .started_tasks
                 .load(std::sync::atomic::Ordering::SeqCst)
             {
-                info!("Starting background tasks");
-                // Get all tasks
-                let tasks = bot_binutils::get_tasks(ctx.serenity_context, &data);
-                tokio::task::spawn(botox::taskman::start_all_tasks(
-                    tasks,
-                    ctx.serenity_context.clone(),
-                ));
-
                 info!("Starting IPC");
                 let data = ctx.serenity_context.data::<Data>();
                 let serenity_context = ctx.serenity_context.clone();
@@ -202,49 +197,18 @@ async fn event_listener<'a>(
                 tokio::task::spawn(async move {
                     log::info!("Starting RPC server");
 
-                    let mut count = 0;
-                    loop {
-                        let rpc_server = rust_rpc_server_bot::create_bot_rpc_server(
-                            data.clone(),
-                            &serenity_context,
-                        );
+                    let rpc_server =
+                        rust_rpc_server_bot::create_bot_rpc_server(data.clone(), &serenity_context);
 
-                        if count > 10 {
-                            error!("Failed to start RPC server after 10 attempts, exiting...");
-                            std::process::exit(1);
-                        }
-
-                        let opts = rust_rpc_server::CreateRpcServerOptions {
-                            bind: rust_rpc_server::CreateRpcServerBind::Address(format!(
-                                "{}:{}",
-                                config::CONFIG.base_ports.bot_bind_addr,
-                                config::CONFIG.base_ports.bot
-                            )),
-                        };
-
-                        match rust_rpc_server::start_rpc_server(opts, rpc_server).await {
-                            Ok(_) => {
-                                info!("RPC server started successfully");
-                                break;
-                            }
-                            Err(e) => {
-                                error!("Error starting RPC server: {}", e);
-                                count += 1;
-                                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-                            }
-                        }
-                    }
-                });
-
-                let ctx = ctx.serenity_context.clone();
-                let _ = tokio::task::spawn(async move {
-                    match bot_binutils::on_startup(ctx).await {
-                        Ok(_) => {}
-                        Err(e) => {
-                            error!("Error in on_startup: {}", e);
-                            std::process::exit(1);
-                        }
+                    let opts = rust_rpc_server::CreateRpcServerOptions {
+                        bind: rust_rpc_server::CreateRpcServerBind::Address(format!(
+                            "{}:{}",
+                            config::CONFIG.base_ports.bot_bind_addr,
+                            config::CONFIG.base_ports.bot
+                        )),
                     };
+
+                    rust_rpc_server::start_rpc_server(opts, rpc_server).await;
                 });
 
                 CONNECT_STATE
@@ -268,30 +232,6 @@ async fn event_listener<'a>(
     {
         return Ok(());
     }
-
-    // Get guild id
-    let event_guild_id = match get_event_guild_id(event) {
-        Some(guild_id) => guild_id,
-        None => return Ok(()),
-    };
-
-    // Create context for event handlers, this is done here and wrapped in an Arc to avoid useless clones
-    let event_handler_context = EventHandlerContext {
-        guild_id: event_guild_id,
-        data: ctx.user_data(),
-        event: AntiraidEvent::Discord(&event),
-        serenity_context: ctx.serenity_context.clone(),
-    };
-
-    if let Err(e) = silverpelt::ar_event::dispatch_event_to_modules(&event_handler_context).await {
-        error!(
-            "Error dispatching event to modules: {}",
-            e.into_iter()
-                .map(|e| e.to_string())
-                .collect::<Vec<_>>()
-                .join(", ")
-        );
-    };
 
     Ok(())
 }
@@ -399,18 +339,14 @@ pub async fn start() {
 
     let client_builder = serenity::all::ClientBuilder::new_with_http(http, intents);
 
-    info!("Created ClientBuilder");
-
-    info!("Creating SilverpeltCache");
-
-    let silverpelt_cache = {
-        let mut silverpelt_cache = silverpelt::cache::SilverpeltCache::default();
+    let module_cache = {
+        let mut module_cache = modules::cache::ModuleCache::default();
 
         for module in modules() {
-            silverpelt_cache.add_module(module);
+            module_cache.add_module(module);
         }
 
-        Arc::new(silverpelt_cache)
+        Arc::new(module_cache)
     };
 
     let framework_opts = poise::FrameworkOptions {
@@ -420,8 +356,8 @@ pub async fn start() {
             ..poise::PrefixFrameworkOptions::default()
         },
         event_handler: |ctx, event| Box::pin(event_listener(ctx, event)),
-        commands: bot_binutils::get_commands(&silverpelt_cache),
-        command_check: Some(|ctx| Box::pin(bot_binutils::command_check(ctx))),
+        commands: crate::binutils::get_commands(&module_cache),
+        command_check: Some(|ctx| Box::pin(crate::binutils::command_check(ctx))),
         pre_command: |ctx| {
             Box::pin(async move {
                 info!(
@@ -450,7 +386,7 @@ pub async fn start() {
                 .await;
             })
         },
-        on_error: |error| Box::pin(bot_binutils::on_error(error)),
+        on_error: |error| Box::pin(crate::binutils::on_error(error)),
         ..Default::default()
     };
 
@@ -474,6 +410,7 @@ pub async fn start() {
         cmd_args: cmd_args.clone(),
         cache_http: Arc::new(RwLock::new(None)),
         shard_manager: Arc::new(RwLock::new(None)),
+        module_cache,
     });
 
     let data = Data {
@@ -487,7 +424,6 @@ pub async fn start() {
         reqwest,
         extra_data: dashmap::DashMap::new(),
         props: props.clone(),
-        silverpelt_cache,
     };
 
     let mut client = client_builder
