@@ -73,7 +73,8 @@ pub async fn lockdowns_tsl(ctx: Context<'_>, reason: String) -> Result<(), Error
     let lockdown_type = lockdowns::tsl::TraditionalServerLockdown {};
 
     let lockdown_data = lockdowns::LockdownData {
-        cache_http: botox::cache::CacheHttpImpl::from_ctx(ctx.serenity_context()),
+        cache: ctx.cache(),
+        http: ctx.http(),
         pool: data.pool.clone(),
         reqwest: data.reqwest.clone(),
         object_store: data.object_store.clone(),
@@ -109,7 +110,8 @@ pub async fn lockdowns_qsl(ctx: Context<'_>, reason: String) -> Result<(), Error
     let lockdown_type = lockdowns::qsl::QuickServerLockdown {};
 
     let lockdown_data = lockdowns::LockdownData {
-        cache_http: botox::cache::CacheHttpImpl::from_ctx(ctx.serenity_context()),
+        cache: ctx.cache(),
+        http: ctx.http(),
         pool: data.pool.clone(),
         reqwest: data.reqwest.clone(),
         object_store: data.object_store.clone(),
@@ -150,7 +152,8 @@ pub async fn lockdowns_scl(
     let lockdown_type = lockdowns::scl::SingleChannelLockdown(channel);
 
     let lockdown_data = lockdowns::LockdownData {
-        cache_http: botox::cache::CacheHttpImpl::from_ctx(ctx.serenity_context()),
+        cache: ctx.cache(),
+        http: ctx.http(),
         pool: data.pool.clone(),
         reqwest: data.reqwest.clone(),
         object_store: data.object_store.clone(),
@@ -190,7 +193,8 @@ pub async fn lockdowns_role(
     let lockdown_type = lockdowns::role::RoleLockdown(role);
 
     let lockdown_data = lockdowns::LockdownData {
-        cache_http: botox::cache::CacheHttpImpl::from_ctx(ctx.serenity_context()),
+        cache: ctx.cache(),
+        http: ctx.http(),
         pool: data.pool.clone(),
         reqwest: data.reqwest.clone(),
         object_store: data.object_store.clone(),
@@ -223,7 +227,8 @@ pub async fn lockdowns_remove(ctx: Context<'_>, id: String) -> Result<(), Error>
         .map_err(|e| format!("Error while fetching lockdown set: {}", e))?;
 
     let lockdown_data = lockdowns::LockdownData {
-        cache_http: botox::cache::CacheHttpImpl::from_ctx(ctx.serenity_context()),
+        cache: ctx.cache(),
+        http: ctx.http(),
         pool: data.pool.clone(),
         reqwest: data.reqwest.clone(),
         object_store: data.object_store.clone(),

@@ -66,14 +66,18 @@ fn whois_user<'a>(user: &User) -> CreateEmbed<'a> {
 #[poise::command(slash_command)]
 pub async fn whois(ctx: Context<'_>, user: Option<User>) -> Result<(), Error> {
     let data = ctx.data();
-    let cache_http = botox::cache::CacheHttpImpl::from_ctx(ctx.serenity_context());
     let user = user.unwrap_or(ctx.author().clone());
 
     let embed = {
         if let Some(guild_id) = ctx.guild_id() {
-            let member =
-                sandwich_driver::member_in_guild(&cache_http, &data.reqwest, guild_id, user.id)
-                    .await?;
+            let member = sandwich_driver::member_in_guild(
+                ctx.cache(),
+                ctx.http(),
+                &data.reqwest,
+                guild_id,
+                user.id,
+            )
+            .await?;
 
             if let Some(member) = member {
                 whois_member(&member)

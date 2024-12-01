@@ -44,7 +44,7 @@ pub(crate) async fn settings_operation(
         OperationType::View => {
             match ar_settings::cfg::settings_view(
                 &setting,
-                &modules::settings_data(&data, serenity_context),
+                &modules::settings_data(serenity_context),
                 guild_id,
                 user_id,
                 req.fields,
@@ -58,7 +58,7 @@ pub(crate) async fn settings_operation(
         OperationType::Create => {
             match ar_settings::cfg::settings_create(
                 &setting,
-                &modules::settings_data(&data, serenity_context),
+                &modules::settings_data(serenity_context),
                 guild_id,
                 user_id,
                 req.fields,
@@ -72,7 +72,7 @@ pub(crate) async fn settings_operation(
         OperationType::Update => {
             match ar_settings::cfg::settings_update(
                 &setting,
-                &modules::settings_data(&data, serenity_context),
+                &modules::settings_data(serenity_context),
                 guild_id,
                 user_id,
                 req.fields,
@@ -95,7 +95,7 @@ pub(crate) async fn settings_operation(
 
             match ar_settings::cfg::settings_delete(
                 &setting,
-                &modules::settings_data(&data, serenity_context),
+                &modules::settings_data(serenity_context),
                 guild_id,
                 user_id,
                 pkey.clone(),

@@ -72,16 +72,22 @@ async fn modules(
 #[axum::debug_handler]
 async fn guilds_exist(
     State(AppData {
-        data, cache_http, ..
+        data,
+        serenity_context,
     }): State<AppData>,
     Json(guilds): Json<Vec<serenity::all::GuildId>>,
 ) -> Response<Vec<i32>> {
     let mut guilds_exist = Vec::with_capacity(guilds.len());
 
     for guild in guilds {
-        let has_guild = sandwich_driver::has_guild(&cache_http, &data.reqwest, guild)
-            .await
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        let has_guild = sandwich_driver::has_guild(
+            &serenity_context.cache,
+            &serenity_context.http,
+            &data.reqwest,
+            guild,
+        )
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
         guilds_exist.push({
             if has_guild {
@@ -98,61 +104,84 @@ async fn guilds_exist(
 /// Returns basic user/guild information [BaseGuildUserInfo]
 async fn base_guild_user_info(
     State(AppData {
-        data, cache_http, ..
+        data,
+        serenity_context,
+        ..
     }): State<AppData>,
     Path((guild_id, user_id)): Path<(serenity::all::GuildId, serenity::all::UserId)>,
 ) -> Response<crate::types::BaseGuildUserInfo> {
-    let bot_user_id = cache_http.cache.current_user().id;
-    let guild = sandwich_driver::guild(&cache_http, &data.reqwest, guild_id)
-        .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to get guild: {:#?}", e),
-            )
-        })?;
+    let bot_user_id = serenity_context.cache.current_user().id;
+    let guild = sandwich_driver::guild(
+        &serenity_context.cache,
+        &serenity_context.http,
+        &data.reqwest,
+        guild_id,
+    )
+    .await
+    .map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to get guild: {:#?}", e),
+        )
+    })?;
 
     // Next fetch the member and bot_user
-    let member: serenity::model::prelude::Member =
-        match sandwich_driver::member_in_guild(&cache_http, &data.reqwest, guild_id, user_id).await
-        {
-            Ok(Some(member)) => member,
-            Ok(None) => {
-                return Err((StatusCode::NOT_FOUND, "User not found".into()));
-            }
-            Err(e) => {
-                return Err((
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to get member: {:#?}", e),
-                ));
-            }
-        };
+    let member: serenity::model::prelude::Member = match sandwich_driver::member_in_guild(
+        &serenity_context.cache,
+        &serenity_context.http,
+        &data.reqwest,
+        guild_id,
+        user_id,
+    )
+    .await
+    {
+        Ok(Some(member)) => member,
+        Ok(None) => {
+            return Err((StatusCode::NOT_FOUND, "User not found".into()));
+        }
+        Err(e) => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to get member: {:#?}", e),
+            ));
+        }
+    };
 
-    let bot_user: serenity::model::prelude::Member =
-        match sandwich_driver::member_in_guild(&cache_http, &data.reqwest, guild_id, bot_user_id)
-            .await
-        {
-            Ok(Some(member)) => member,
-            Ok(None) => {
-                return Err((StatusCode::NOT_FOUND, "Bot user not found".into()));
-            }
-            Err(e) => {
-                return Err((
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to get bot user: {:#?}", e),
-                ));
-            }
-        };
+    let bot_user: serenity::model::prelude::Member = match sandwich_driver::member_in_guild(
+        &serenity_context.cache,
+        &serenity_context.http,
+        &data.reqwest,
+        guild_id,
+        bot_user_id,
+    )
+    .await
+    {
+        Ok(Some(member)) => member,
+        Ok(None) => {
+            return Err((StatusCode::NOT_FOUND, "Bot user not found".into()));
+        }
+        Err(e) => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to get bot user: {:#?}", e),
+            ));
+        }
+    };
 
     // Fetch the channels
-    let channels = sandwich_driver::guild_channels(&cache_http, &data.reqwest, guild_id)
-        .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to get channels: {:#?}", e),
-            )
-        })?;
+    let channels = sandwich_driver::guild_channels(
+        &serenity_context.cache,
+        &serenity_context.http,
+        &data.reqwest,
+        guild_id,
+    )
+    .await
+    .map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to get channels: {:#?}", e),
+        )
+    })?;
 
     let mut channels_with_permissions = Vec::with_capacity(channels.len());
 

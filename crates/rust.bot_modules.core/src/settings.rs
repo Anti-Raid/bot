@@ -16,9 +16,9 @@ async fn check_perms<'a>(
     let res = modules::permission_checks::member_has_kittycat_perm(
         ctx.guild_id,
         ctx.author,
-        &ctx.data.pool,
+        &ctx.data.data.pool,
         &ctx.data.serenity_context,
-        &ctx.data.reqwest,
+        &ctx.data.data.reqwest,
         &None,
         perm,
         modules::permission_checks::CheckCommandOptions::default(),
@@ -116,7 +116,7 @@ impl SettingView for GuildRolesExecutor {
         _filters: indexmap::IndexMap<String, splashcore_rs::value::Value>,
     ) -> Result<Vec<indexmap::IndexMap<String, splashcore_rs::value::Value>>, SettingsError> {
         let rows = sqlx::query!("SELECT role_id, perms, index, display_name, created_at, created_by, last_updated_at, last_updated_by FROM guild_roles WHERE guild_id = $1", context.guild_id.to_string())
-        .fetch_all(&context.data.pool)
+        .fetch_all(&context.data.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Error while fetching guild roles: {}", e),
@@ -164,7 +164,7 @@ impl SettingCreator for GuildRolesExecutor {
             ctx.guild_id.to_string(),
             res.role_id.to_string()
         )
-        .fetch_one(&ctx.data.pool)
+        .fetch_one(&ctx.data.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Failed to check if role exists: {:?}", e),
@@ -192,7 +192,7 @@ impl SettingCreator for GuildRolesExecutor {
             ctx.author.to_string(),
             ctx.author.to_string()
         )
-        .execute(&ctx.data.pool)
+        .execute(&ctx.data.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Failed to insert role: {:?}", e),
@@ -205,7 +205,7 @@ impl SettingCreator for GuildRolesExecutor {
             ctx.guild_id.to_string(),
             res.role_id.to_string()
         )
-        .execute(&ctx.data.pool)
+        .execute(&ctx.data.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Failed to update guild members cache: {:?}", e),
@@ -239,7 +239,7 @@ impl SettingUpdater for GuildRolesExecutor {
             ctx.guild_id.to_string(),
             res.role_id.to_string()
         )
-        .execute(&ctx.data.pool)
+        .execute(&ctx.data.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Failed to update role: {:?}", e),
@@ -261,7 +261,7 @@ impl SettingDeleter for GuildRolesExecutor {
         check_perms(&ctx, &"guild_roles.delete".into()).await?;
 
         let Some(row) = sqlx::query!("SELECT role_id, perms, index, display_name FROM guild_roles WHERE guild_id = $1 AND role_id = $2", ctx.guild_id.to_string(), primary_key.to_string())
-        .fetch_optional(&ctx.data.pool)
+        .fetch_optional(&ctx.data.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Error while fetching roles: {}", e),
@@ -290,7 +290,7 @@ impl SettingDeleter for GuildRolesExecutor {
             ctx.guild_id.to_string(),
             res.role_id.to_string()
         )
-        .execute(&ctx.data.pool)
+        .execute(&ctx.data.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Failed to delete role: {:?}", e),
@@ -303,7 +303,7 @@ impl SettingDeleter for GuildRolesExecutor {
             ctx.guild_id.to_string(),
             res.role_id.to_string()
         )
-        .execute(&ctx.data.pool)
+        .execute(&ctx.data.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Failed to update guild members cache: {:?}", e),
@@ -360,7 +360,7 @@ impl GuildRolesExecutor {
                     "SELECT MAX(index) FROM guild_roles WHERE guild_id = $1",
                     ctx.guild_id.to_string()
                 )
-                .fetch_one(&ctx.data.pool)
+                .fetch_one(&ctx.data.data.pool)
                 .await
                 .map_err(|e| SettingsError::Generic {
                     message: format!("Failed to get highest index: {:?}", e),
@@ -428,13 +428,18 @@ impl GuildRolesExecutor {
             None
         };
 
-        let guild = sandwich_driver::guild(&ctx.data.cache_http, &ctx.data.reqwest, ctx.guild_id)
-            .await
-            .map_err(|e| SettingsError::Generic {
-                message: format!("Failed to get guild: {:?}", e),
-                src: "base_verify_checks".to_string(),
-                typ: "internal".to_string(),
-            })?;
+        let guild = sandwich_driver::guild(
+            &ctx.data.serenity_context.cache,
+            &ctx.data.serenity_context.http,
+            &ctx.data.data.reqwest,
+            ctx.guild_id,
+        )
+        .await
+        .map_err(|e| SettingsError::Generic {
+            message: format!("Failed to get guild: {:?}", e),
+            src: "base_verify_checks".to_string(),
+            typ: "internal".to_string(),
+        })?;
 
         // If owner, early return
         if guild.owner_id == ctx.author {
@@ -447,8 +452,9 @@ impl GuildRolesExecutor {
         }
 
         let Some(member) = sandwich_driver::member_in_guild(
-            &ctx.data.cache_http,
-            &ctx.data.reqwest,
+            &ctx.data.serenity_context.cache,
+            &ctx.data.serenity_context.http,
+            &ctx.data.data.reqwest,
             ctx.guild_id,
             ctx.author,
         )
@@ -471,7 +477,7 @@ impl GuildRolesExecutor {
                 "SELECT index, role_id, perms FROM guild_roles WHERE guild_id = $1",
                 ctx.guild_id.to_string()
             )
-            .fetch_all(&ctx.data.pool)
+            .fetch_all(&ctx.data.data.pool)
             .await
             .map_err(|e| SettingsError::Generic {
                 message: format!("Failed to get current role configuration: {:?}", e),
@@ -555,6 +561,7 @@ impl GuildRolesExecutor {
 
         let author_kittycat_perms = silverpelt::member_permission_calc::get_kittycat_perms(
             &mut *ctx
+                .data
                 .data
                 .pool
                 .acquire()
@@ -746,14 +753,19 @@ impl GuildMembersExecutor {
         guild_owner_id: serenity::all::UserId,
         user_id: serenity::all::UserId,
     ) -> Result<(Vec<serenity::all::RoleId>, Vec<kittycat::perms::Permission>), SettingsError> {
-        let Some(member) =
-            sandwich_driver::member_in_guild(&data.cache_http, &data.reqwest, guild_id, user_id)
-                .await
-                .map_err(|e| SettingsError::Generic {
-                    message: format!("Failed to get user {}: {:?}", user_id, e),
-                    src: "GuildMembersExecutor".to_string(),
-                    typ: "internal".to_string(),
-                })?
+        let Some(member) = sandwich_driver::member_in_guild(
+            &data.serenity_context.cache,
+            &data.serenity_context.http,
+            &data.data.reqwest,
+            guild_id,
+            user_id,
+        )
+        .await
+        .map_err(|e| SettingsError::Generic {
+            message: format!("Failed to get user {}: {:?}", user_id, e),
+            src: "GuildMembersExecutor".to_string(),
+            typ: "internal".to_string(),
+        })?
         else {
             return Ok((Vec::new(), Vec::new()));
         };
@@ -816,7 +828,7 @@ impl GuildMembersExecutor {
                 ctx.guild_id.to_string(),
                 user_id.to_string()
             )
-            .fetch_one(&ctx.data.pool)
+            .fetch_one(&ctx.data.data.pool)
             .await
             .map_err(|e| SettingsError::Generic {
                 message: format!("Failed to get current public status: {:?}", e),
@@ -860,13 +872,18 @@ impl GuildMembersExecutor {
             perm_overrides
         };
 
-        let guild = sandwich_driver::guild(&ctx.data.cache_http, &ctx.data.reqwest, ctx.guild_id)
-            .await
-            .map_err(|e| SettingsError::Generic {
-                message: format!("Failed to get guild: {:?}", e),
-                src: "NativeAction->index".to_string(),
-                typ: "internal".to_string(),
-            })?;
+        let guild = sandwich_driver::guild(
+            &ctx.data.serenity_context.cache,
+            &ctx.data.serenity_context.http,
+            &ctx.data.data.reqwest,
+            ctx.guild_id,
+        )
+        .await
+        .map_err(|e| SettingsError::Generic {
+            message: format!("Failed to get guild: {:?}", e),
+            src: "NativeAction->index".to_string(),
+            typ: "internal".to_string(),
+        })?;
 
         // If owner, early return
         if guild.owner_id == ctx.author {
@@ -878,101 +895,96 @@ impl GuildMembersExecutor {
         }
 
         // Get the authors kittycat permissions
-        let author_kittycat_perms = match self
-            .get_kittycat_perms_for_user(
-                &ctx.data,
-                &mut *ctx
-                    .data
-                    .pool
-                    .acquire()
-                    .await
-                    .map_err(|e| SettingsError::Generic {
-                        message: format!("Failed to get pool: {:?}", e),
+        let author_kittycat_perms =
+            match self
+                .get_kittycat_perms_for_user(
+                    &ctx.data,
+                    &mut *ctx.data.data.pool.acquire().await.map_err(|e| {
+                        SettingsError::Generic {
+                            message: format!("Failed to get pool: {:?}", e),
+                            src: "GuildMembersExecutor".to_string(),
+                            typ: "internal".to_string(),
+                        }
+                    })?,
+                    ctx.guild_id,
+                    guild.owner_id,
+                    ctx.author,
+                )
+                .await
+            {
+                Ok((_, author_kittycat_perms)) => author_kittycat_perms,
+                Err(e) => {
+                    return Err(SettingsError::Generic {
+                        message: format!("Failed to get author permissions: {:?}", e),
                         src: "GuildMembersExecutor".to_string(),
                         typ: "internal".to_string(),
-                    })?,
-                ctx.guild_id,
-                guild.owner_id,
-                ctx.author,
-            )
-            .await
-        {
-            Ok((_, author_kittycat_perms)) => author_kittycat_perms,
-            Err(e) => {
-                return Err(SettingsError::Generic {
-                    message: format!("Failed to get author permissions: {:?}", e),
-                    src: "GuildMembersExecutor".to_string(),
-                    typ: "internal".to_string(),
-                })
-            }
-        };
+                    })
+                }
+            };
 
         // Get the target members current kittycat permissions (if any) as well as their roles (for finding new permissions with overrides taken into account)
-        let (target_member_roles, current_user_kittycat_perms) = match self
-            .get_kittycat_perms_for_user(
-                &ctx.data,
-                &mut *ctx
-                    .data
-                    .pool
-                    .acquire()
-                    .await
-                    .map_err(|e| SettingsError::Generic {
-                        message: format!("Failed to get pool: {:?}", e),
+        let (target_member_roles, current_user_kittycat_perms) =
+            match self
+                .get_kittycat_perms_for_user(
+                    &ctx.data,
+                    &mut *ctx.data.data.pool.acquire().await.map_err(|e| {
+                        SettingsError::Generic {
+                            message: format!("Failed to get pool: {:?}", e),
+                            src: "GuildMembersExecutor".to_string(),
+                            typ: "internal".to_string(),
+                        }
+                    })?,
+                    ctx.guild_id,
+                    guild.owner_id,
+                    user_id,
+                )
+                .await
+            {
+                Ok((target_member_roles, current_user_kittycat_perms)) => {
+                    (target_member_roles, current_user_kittycat_perms)
+                }
+                Err(e) => {
+                    return Err(SettingsError::Generic {
+                        message: format!("Failed to get target member permissions: {:?}", e),
                         src: "GuildMembersExecutor".to_string(),
                         typ: "internal".to_string(),
-                    })?,
-                ctx.guild_id,
-                guild.owner_id,
-                user_id,
-            )
-            .await
-        {
-            Ok((target_member_roles, current_user_kittycat_perms)) => {
-                (target_member_roles, current_user_kittycat_perms)
-            }
-            Err(e) => {
-                return Err(SettingsError::Generic {
-                    message: format!("Failed to get target member permissions: {:?}", e),
-                    src: "GuildMembersExecutor".to_string(),
-                    typ: "internal".to_string(),
-                })
-            }
-        };
+                    })
+                }
+            };
 
         // Find new user's permissions with the given perm overrides
-        let new_user_kittycat_perms =
-            {
-                let roles_str = silverpelt::member_permission_calc::create_roles_list_for_guild(
-                    &target_member_roles,
-                    ctx.guild_id,
-                );
+        let new_user_kittycat_perms = {
+            let roles_str = silverpelt::member_permission_calc::create_roles_list_for_guild(
+                &target_member_roles,
+                ctx.guild_id,
+            );
 
-                let user_positions =
-                    silverpelt::member_permission_calc::get_user_positions_from_db(
-                        &mut *ctx.data.pool.acquire().await.map_err(|e| {
-                            SettingsError::Generic {
-                                message: format!("Failed to get pool: {:?}", e),
-                                src: "GuildMembersExecutor".to_string(),
-                                typ: "internal".to_string(),
-                            }
-                        })?,
-                        ctx.guild_id,
-                        &roles_str,
-                    )
-                    .await
-                    .map_err(|e| SettingsError::Generic {
-                        message: format!("Failed to get user positions: {:?}", e),
-                        src: "GuildMembersExecutor".to_string(),
-                        typ: "internal".to_string(),
-                    })?;
-
-                silverpelt::member_permission_calc::rederive_perms_impl(
+            let user_positions =
+                silverpelt::member_permission_calc::get_user_positions_from_db(
+                    &mut *ctx.data.data.pool.acquire().await.map_err(|e| {
+                        SettingsError::Generic {
+                            message: format!("Failed to get pool: {:?}", e),
+                            src: "GuildMembersExecutor".to_string(),
+                            typ: "internal".to_string(),
+                        }
+                    })?,
                     ctx.guild_id,
-                    user_id,
-                    user_positions,
-                    perm_overrides.clone(),
+                    &roles_str,
                 )
-            };
+                .await
+                .map_err(|e| SettingsError::Generic {
+                    message: format!("Failed to get user positions: {:?}", e),
+                    src: "GuildMembersExecutor".to_string(),
+                    typ: "internal".to_string(),
+                })?;
+
+            silverpelt::member_permission_calc::rederive_perms_impl(
+                ctx.guild_id,
+                user_id,
+                user_positions,
+                perm_overrides.clone(),
+            )
+        };
 
         // Check permissions
         match op {
@@ -1042,7 +1054,7 @@ impl SettingView for GuildMembersExecutor {
         _filters: indexmap::IndexMap<String, splashcore_rs::value::Value>,
     ) -> Result<Vec<indexmap::IndexMap<String, splashcore_rs::value::Value>>, SettingsError> {
         let rows = sqlx::query!("SELECT user_id, perm_overrides, public, created_at FROM guild_members WHERE guild_id = $1", context.guild_id.to_string())
-        .fetch_all(&context.data.pool)
+        .fetch_all(&context.data.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Error while fetching guild roles: {}", e),
@@ -1083,7 +1095,7 @@ impl SettingCreator for GuildMembersExecutor {
             ctx.guild_id.to_string(),
             res.user_id.to_string()
         )
-        .fetch_one(&ctx.data.pool)
+        .fetch_one(&ctx.data.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Failed to check if role exists: {:?}", e),
@@ -1108,7 +1120,7 @@ impl SettingCreator for GuildMembersExecutor {
             &res.perm_overrides.into_iter().map(|x| x.to_string()).collect::<Vec<String>>(),
             res.public
         )
-        .execute(&ctx.data.pool)
+        .execute(&ctx.data.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Failed to insert role: {:?}", e),
@@ -1138,7 +1150,7 @@ impl SettingUpdater for GuildMembersExecutor {
             ctx.guild_id.to_string(),
             res.user_id.to_string()
         )
-        .execute(&ctx.data.pool)
+        .execute(&ctx.data.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Failed to update role: {:?}", e),
@@ -1160,7 +1172,7 @@ impl SettingDeleter for GuildMembersExecutor {
         check_perms(&ctx, &"guild_members.delete".into()).await?;
 
         let Some(row) = sqlx::query!("SELECT user_id, perm_overrides, public FROM guild_members WHERE guild_id = $1 AND user_id = $2", ctx.guild_id.to_string(), primary_key.to_string())
-        .fetch_optional(&ctx.data.pool)
+        .fetch_optional(&ctx.data.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Error while fetching roles: {}", e),
@@ -1186,7 +1198,7 @@ impl SettingDeleter for GuildMembersExecutor {
             ctx.guild_id.to_string(),
             res.user_id.to_string()
         )
-        .execute(&ctx.data.pool)
+        .execute(&ctx.data.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Failed to delete role: {:?}", e),
@@ -1294,7 +1306,7 @@ impl GuildTemplateExecutor {
                 shop_tname,
                 shop_tversion
             )
-            .fetch_one(&ctx.data.pool)
+            .fetch_one(&ctx.data.data.pool)
             .await
             .map_err(|e| SettingsError::Generic {
                 message: format!("Failed to get shop template: {:?}", e),
@@ -1321,7 +1333,7 @@ impl GuildTemplateExecutor {
     ) -> Result<(), SettingsError> {
         // Dispatch a OnStartup event for the template
         silverpelt::ar_event::AntiraidEvent::OnStartup(vec![name.to_string()])
-            .dispatch_to_template_worker(&modules::get_data(ctx.data), ctx.guild_id)
+            .dispatch_to_template_worker(&ctx.data.data, ctx.guild_id)
             .await
             .map_err(|e| SettingsError::Generic {
                 message: format!("Failed to dispatch OnStartup event: {:?}", e),
@@ -1345,7 +1357,7 @@ impl SettingView for GuildTemplateExecutor {
         check_perms(&context, &"guild_templates.view".into()).await?;
 
         let rows = sqlx::query!("SELECT name, content, events, error_channel, created_at, created_by, last_updated_at, last_updated_by FROM guild_templates WHERE guild_id = $1", context.guild_id.to_string())
-        .fetch_all(&context.data.pool)
+        .fetch_all(&context.data.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Error while fetching guild templates: {}", e),
@@ -1405,7 +1417,7 @@ impl SettingCreator for GuildTemplateExecutor {
             ctx.guild_id.to_string(),
             name
         )
-        .fetch_one(&ctx.data.pool)
+        .fetch_one(&ctx.data.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Failed to check if template exists: {:?}", e),
@@ -1467,7 +1479,7 @@ impl SettingCreator for GuildTemplateExecutor {
             ctx.author.to_string(),
             ctx.author.to_string()
         )
-        .execute(&ctx.data.pool)
+        .execute(&ctx.data.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Failed to insert template: {:?}", e),
@@ -1540,7 +1552,7 @@ impl SettingUpdater for GuildTemplateExecutor {
             ctx.guild_id.to_string(),
             name
         )
-        .execute(&ctx.data.pool)
+        .execute(&ctx.data.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Failed to update template: {:?}", e),
@@ -1568,7 +1580,7 @@ impl SettingDeleter for GuildTemplateExecutor {
             ctx.guild_id.to_string(),
             primary_key.to_string()
         )
-        .fetch_optional(&ctx.data.pool)
+        .fetch_optional(&ctx.data.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Error while fetching template: {}", e),
@@ -1588,7 +1600,7 @@ impl SettingDeleter for GuildTemplateExecutor {
             ctx.guild_id.to_string(),
             name
         )
-        .execute(&ctx.data.pool)
+        .execute(&ctx.data.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Failed to delete template: {:?}", e),
@@ -1656,7 +1668,7 @@ impl SettingView for GuildTemplatesKVExecutor {
         check_perms(&context, &"guild_templates_kv.view".into()).await?;
 
         let rows = sqlx::query!("SELECT key, value, created_at, last_updated_at FROM guild_templates_kv WHERE guild_id = $1", context.guild_id.to_string())
-        .fetch_all(&context.data.pool)
+        .fetch_all(&context.data.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Error while fetching guild templates kv: {}", e),
@@ -1701,7 +1713,7 @@ impl SettingCreator for GuildTemplatesKVExecutor {
             "SELECT COUNT(*) FROM guild_templates_kv WHERE guild_id = $1",
             ctx.guild_id.to_string()
         )
-        .fetch_one(&ctx.data.pool)
+        .fetch_one(&ctx.data.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Failed to check total kv count: {:?}", e),
@@ -1733,7 +1745,7 @@ impl SettingCreator for GuildTemplatesKVExecutor {
             ctx.guild_id.to_string(),
             key
         )
-        .fetch_one(&ctx.data.pool)
+        .fetch_one(&ctx.data.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Failed to check if kv exists: {:?}", e),
@@ -1764,7 +1776,7 @@ impl SettingCreator for GuildTemplatesKVExecutor {
             key,
             value
         )
-        .execute(&ctx.data.pool)
+        .execute(&ctx.data.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Failed to insert kv: {:?}", e),
@@ -1805,7 +1817,7 @@ impl SettingUpdater for GuildTemplatesKVExecutor {
             ctx.guild_id.to_string(),
             key
         )
-        .execute(&ctx.data.pool)
+        .execute(&ctx.data.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Failed to update kv: {:?}", e),
@@ -1831,7 +1843,7 @@ impl SettingDeleter for GuildTemplatesKVExecutor {
             ctx.guild_id.to_string(),
             primary_key.to_string()
         )
-        .fetch_one(&ctx.data.pool)
+        .fetch_one(&ctx.data.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Error while fetching kv: {}", e),
@@ -1852,7 +1864,7 @@ impl SettingDeleter for GuildTemplatesKVExecutor {
             ctx.guild_id.to_string(),
             primary_key.to_string()
         )
-        .execute(&ctx.data.pool)
+        .execute(&ctx.data.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Failed to delete kv: {:?}", e),
@@ -1982,7 +1994,7 @@ impl SettingView for GuildTemplateShopExecutor {
         check_perms(&context, &"guild_templates_shop.view".into()).await?;
 
         let rows = sqlx::query!("SELECT id, name, version, description, type, created_at, created_by, last_updated_at, last_updated_by FROM template_shop WHERE owner_guild = $1", context.guild_id.to_string())
-        .fetch_all(&context.data.pool)
+        .fetch_all(&context.data.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Error while fetching shop templates: {}", e),
@@ -2069,7 +2081,7 @@ impl SettingCreator for GuildTemplateShopExecutor {
                 ctx.guild_id.to_string(),
                 namespace
             )
-            .fetch_one(&ctx.data.pool)
+            .fetch_one(&ctx.data.data.pool)
             .await
             .map_err(|e| SettingsError::Generic {
                 message: format!("Failed to check if namespace exists: {:?}", e),
@@ -2107,7 +2119,7 @@ impl SettingCreator for GuildTemplateShopExecutor {
             name,
             version
         )
-        .fetch_one(&ctx.data.pool)
+        .fetch_one(&ctx.data.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Failed to check if shop template exists: {:?}", e),
@@ -2157,7 +2169,7 @@ impl SettingCreator for GuildTemplateShopExecutor {
             ctx.author.to_string(),
             ctx.author.to_string()
         )
-        .fetch_one(&ctx.data.pool)
+        .fetch_one(&ctx.data.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Failed to insert shop template: {:?}", e),
@@ -2194,7 +2206,7 @@ impl SettingUpdater for GuildTemplateShopExecutor {
             ctx.guild_id.to_string(),
             id
         )
-        .fetch_one(&ctx.data.pool)
+        .fetch_one(&ctx.data.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Failed to check if shop template exists: {:?}", e),
@@ -2232,7 +2244,7 @@ impl SettingUpdater for GuildTemplateShopExecutor {
             ctx.guild_id.to_string(),
             id
         )
-        .execute(&ctx.data.pool)
+        .execute(&ctx.data.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Failed to update shop template: {:?}", e),
@@ -2273,7 +2285,7 @@ impl SettingDeleter for GuildTemplateShopExecutor {
             ctx.guild_id.to_string(),
             primary_key
         )
-        .fetch_optional(&ctx.data.pool)
+        .fetch_optional(&ctx.data.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Error while fetching shop template: {}", e),
@@ -2293,7 +2305,7 @@ impl SettingDeleter for GuildTemplateShopExecutor {
             ctx.guild_id.to_string(),
             id
         )
-        .execute(&ctx.data.pool)
+        .execute(&ctx.data.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Failed to delete shop template: {:?}", e),
@@ -2421,7 +2433,7 @@ impl SettingView for GuildTemplateShopPublicListExecutor {
         _filters: indexmap::IndexMap<String, splashcore_rs::value::Value>,
     ) -> Result<Vec<indexmap::IndexMap<String, splashcore_rs::value::Value>>, SettingsError> {
         let rows = sqlx::query!("SELECT id, name, version, description, type, owner_guild, created_at, created_by, last_updated_at, last_updated_by FROM template_shop")
-        .fetch_all(&context.data.pool)
+        .fetch_all(&context.data.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Error while fetching shop templates: {}", e),

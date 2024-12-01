@@ -6,7 +6,6 @@ use crate::{
     types::{GuildCommandConfiguration, GuildModuleConfiguration},
     utils::permute_command_names,
 };
-use botox::cache::CacheHttpImpl;
 use kittycat::perms::Permission;
 use log::info;
 use permissions::types::{PermissionCheck, PermissionResult};
@@ -19,7 +18,7 @@ use sqlx::PgPool;
 pub async fn get_user_discord_info(
     guild_id: GuildId,
     user_id: UserId,
-    cache_http: &CacheHttpImpl,
+    serenity_context: &serenity::all::Context,
     reqwest: &reqwest::Client,
     poise_ctx: &Option<crate::Context<'_>>,
 ) -> Result<
@@ -44,7 +43,7 @@ pub async fn get_user_discord_info(
         }
     }
 
-    if let Some(cached_guild) = guild_id.to_guild_cached(&cache_http.cache) {
+    if let Some(cached_guild) = guild_id.to_guild_cached(&serenity_context.cache) {
         // OPTIMIZATION: if owner, we dont need to continue further
         if user_id == cached_guild.owner_id {
             return Ok((
@@ -91,7 +90,7 @@ pub async fn get_user_discord_info(
         }
     }
 
-    let guild = match guild_id.to_partial_guild(&cache_http).await {
+    let guild = match guild_id.to_partial_guild(&serenity_context).await {
         Ok(guild) => guild,
         Err(e) => {
             return Err(PermissionResult::DiscordError {
@@ -130,15 +129,22 @@ pub async fn get_user_discord_info(
     }
 
     let member = {
-        let member =
-            match sandwich_driver::member_in_guild(cache_http, reqwest, guild_id, user_id).await {
-                Ok(member) => member,
-                Err(e) => {
-                    return Err(PermissionResult::DiscordError {
-                        error: e.to_string(),
-                    });
-                }
-            };
+        let member = match sandwich_driver::member_in_guild(
+            &serenity_context.cache,
+            &serenity_context.http,
+            reqwest,
+            guild_id,
+            user_id,
+        )
+        .await
+        {
+            Ok(member) => member,
+            Err(e) => {
+                return Err(PermissionResult::DiscordError {
+                    error: e.to_string(),
+                });
+            }
+        };
 
         let Some(member) = member else {
             return Err(PermissionResult::DiscordError {
@@ -382,20 +388,14 @@ pub async fn check_command(
     }
 
     // Try getting guild+member from cache to speed up response times first
-    let (is_owner, guild_owner_id, member_perms, roles) = match get_user_discord_info(
-        guild_id,
-        user_id,
-        &botox::cache::CacheHttpImpl::from_ctx(serenity_context),
-        reqwest,
-        poise_ctx,
-    )
-    .await
-    {
-        Ok(v) => v,
-        Err(e) => {
-            return e;
-        }
-    };
+    let (is_owner, guild_owner_id, member_perms, roles) =
+        match get_user_discord_info(guild_id, user_id, &serenity_context, reqwest, poise_ctx).await
+        {
+            Ok(v) => v,
+            Err(e) => {
+                return e;
+            }
+        };
 
     if is_owner {
         return PermissionResult::OkWithMessage {
@@ -477,20 +477,14 @@ pub async fn member_has_kittycat_perm(
     opts: CheckCommandOptions,
 ) -> PermissionResult {
     // Try getting guild+member from cache to speed up response times first
-    let (is_owner, guild_owner_id, member_perms, roles) = match get_user_discord_info(
-        guild_id,
-        user_id,
-        &botox::cache::CacheHttpImpl::from_ctx(serenity_context),
-        reqwest,
-        poise_ctx,
-    )
-    .await
-    {
-        Ok(v) => v,
-        Err(e) => {
-            return e;
-        }
-    };
+    let (is_owner, guild_owner_id, member_perms, roles) =
+        match get_user_discord_info(guild_id, user_id, &serenity_context, reqwest, poise_ctx).await
+        {
+            Ok(v) => v,
+            Err(e) => {
+                return e;
+            }
+        };
 
     if is_owner {
         return PermissionResult::OkWithMessage {

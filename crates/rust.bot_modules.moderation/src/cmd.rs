@@ -101,27 +101,31 @@ fn create_message_prune_serde(
 async fn check_hierarchy(ctx: &Context<'_>, user_id: UserId) -> Result<(), Error> {
     let data = ctx.data();
     let sctx = ctx.serenity_context();
-    let cache_http = botox::cache::CacheHttpImpl::from_ctx(sctx);
 
     let Some(guild_id) = ctx.guild_id() else {
         return Err("This command can only be used in a guild".into());
     };
 
-    let guild = guild(&cache_http, &data.reqwest, guild_id).await?;
+    let guild = guild(&sctx.cache, &sctx.http, &data.reqwest, guild_id).await?;
 
     let author_id = ctx.author().id;
 
     let bot_userid = sctx.cache.current_user().id;
-    let Some(bot) = member_in_guild(&cache_http, &data.reqwest, guild_id, bot_userid).await? else {
+    let Some(bot) =
+        member_in_guild(&sctx.cache, &sctx.http, &data.reqwest, guild_id, bot_userid).await?
+    else {
         return Err("Bot member not found".into());
     };
 
-    let Some(author) = member_in_guild(&cache_http, &data.reqwest, guild_id, author_id).await?
+    let Some(author) =
+        member_in_guild(&sctx.cache, &sctx.http, &data.reqwest, guild_id, author_id).await?
     else {
         return Err("Message author not found".into());
     };
 
-    let Some(user) = member_in_guild(&cache_http, &data.reqwest, guild_id, user_id).await? else {
+    let Some(user) =
+        member_in_guild(&sctx.cache, &sctx.http, &data.reqwest, guild_id, user_id).await?
+    else {
         // User is not in the server, so yes, they're below us
         return Ok(());
     };

@@ -90,6 +90,7 @@ pub async fn cmd_loader() {
         }
         _ => {
             println!("No/unknown command specified.\n\ngenassets: [generate build assets]\ntest [test bot with some sanity checks]\nnserenity.test: [test serenity library]\npoise.register: [register poise commands]\nbot: [start bot]");
+            std::process::exit(1);
         }
     }
 }

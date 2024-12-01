@@ -12,9 +12,9 @@ async fn check_perms<'a>(
     let res = modules::permission_checks::member_has_kittycat_perm(
         ctx.guild_id,
         ctx.author,
-        &ctx.data.pool,
+        &ctx.data.data.pool,
         &ctx.data.serenity_context,
-        &ctx.data.reqwest,
+        &ctx.data.data.reqwest,
         &None,
         perm,
         modules::permission_checks::CheckCommandOptions::default(),
@@ -88,7 +88,7 @@ impl SettingView for LockdownSettingsExecutor {
         check_perms(&context, &"lockdown_settings.view".into()).await?;
 
         let rows = sqlx::query!("SELECT member_roles, require_correct_layout, created_at, created_by, last_updated_at, last_updated_by FROM lockdown__guilds WHERE guild_id = $1", context.guild_id.to_string())
-            .fetch_all(&context.data.pool)
+            .fetch_all(&context.data.data.pool)
             .await
             .map_err(|e| SettingsError::Generic {
                 message: format!("Error while fetching lockdowns: {}", e),
@@ -156,7 +156,7 @@ impl SettingCreator for LockdownSettingsExecutor {
             context.author.to_string(),
             context.author.to_string(),
         )
-        .execute(&context.data.pool)
+        .execute(&context.data.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Error while creating lockdown settings: {}", e),
@@ -204,7 +204,7 @@ impl SettingUpdater for LockdownSettingsExecutor {
             "SELECT COUNT(*) FROM lockdown__guilds WHERE guild_id = $1",
             context.guild_id.to_string(),
         )
-        .fetch_one(&context.data.pool)
+        .fetch_one(&context.data.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Error while updating lockdown settings: {}", e),
@@ -225,7 +225,7 @@ impl SettingUpdater for LockdownSettingsExecutor {
             require_correct_layout,
             context.author.to_string(),
         )
-        .execute(&context.data.pool)
+        .execute(&context.data.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Error while creating lockdown settings: {}", e),
@@ -247,7 +247,7 @@ impl SettingDeleter for LockdownSettingsExecutor {
         check_perms(&context, &"lockdown_settings.delete".into()).await?;
 
         sqlx::query!("DELETE FROM lockdown__guilds WHERE guild_id = $1", context.guild_id.to_string())
-            .execute(&context.data.pool)
+            .execute(&context.data.data.pool)
             .await
             .map_err(|e| SettingsError::Generic {
                 message: format!("Error while deleting lockdown settings: {}", e),
@@ -339,7 +339,7 @@ impl SettingView for LockdownExecutor {
         check_perms(&context, &"lockdowns.view".into()).await?;
 
         let rows = sqlx::query!("SELECT id, data, type, reason, created_at FROM lockdown__guild_lockdowns WHERE guild_id = $1", context.guild_id.to_string())
-            .fetch_all(&context.data.pool)
+            .fetch_all(&context.data.data.pool)
             .await
             .map_err(|e| SettingsError::Generic {
                 message: format!("Error while fetching lockdowns: {}", e),
@@ -375,9 +375,8 @@ impl SettingCreator for LockdownExecutor {
     ) -> Result<indexmap::IndexMap<String, splashcore_rs::value::Value>, SettingsError> {
         check_perms(&context, &"lockdowns.create".into()).await?;
 
-        let data = modules::get_data(&context.data);
-        let modules_cache = modules::module_cache(&data);
-        if !modules::module_config::is_module_enabled(&modules_cache, &context.data.pool, context.guild_id, "lockdown")
+        let modules_cache = modules::module_cache(&context.data.data);
+        if !modules::module_config::is_module_enabled(&modules_cache, &context.data.data.pool, context.guild_id, "lockdown")
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Error while checking if module is enabled: {}", e),
@@ -406,7 +405,7 @@ impl SettingCreator for LockdownExecutor {
     };
 
     // Get the current lockdown set
-    let mut lockdowns = lockdowns::LockdownSet::guild(context.guild_id, &context.data.pool)
+    let mut lockdowns = lockdowns::LockdownSet::guild(context.guild_id, &context.data.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Error while fetching lockdown set: {}", e),
@@ -436,10 +435,11 @@ impl SettingCreator for LockdownExecutor {
         })?;
 
     let lockdown_data = lockdowns::LockdownData {
-        cache_http: context.data.cache_http.clone(),
-        pool: context.data.pool.clone(),
-        reqwest: context.data.reqwest.clone(),
-        object_store: context.data.object_store.clone(),
+        cache: &context.data.serenity_context.cache,
+        http: &context.data.serenity_context.http,
+        pool: context.data.data.pool.clone(),
+        reqwest: context.data.data.reqwest.clone(),
+        object_store: context.data.data.object_store.clone(),
     };
 
     lockdowns
@@ -474,9 +474,8 @@ impl SettingDeleter for LockdownExecutor {
     ) -> Result<(), SettingsError> {
         check_perms(&context, &"lockdowns.delete".into()).await?;
         
-        let data = modules::get_data(&context.data);
-        let modules_cache = modules::module_cache(&data);
-        if !modules::module_config::is_module_enabled(&modules_cache, &context.data.pool, context.guild_id, "lockdown")
+        let modules_cache = modules::module_cache(&context.data.data);
+        if !modules::module_config::is_module_enabled(&modules_cache, &context.data.data.pool, context.guild_id, "lockdown")
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Error while checking if module is enabled: {}", e),
@@ -509,7 +508,7 @@ impl SettingDeleter for LockdownExecutor {
         };
 
         // Get the current lockdown set
-        let mut lockdowns = lockdowns::LockdownSet::guild(context.guild_id, &context.data.pool)
+        let mut lockdowns = lockdowns::LockdownSet::guild(context.guild_id, &context.data.data.pool)
             .await
             .map_err(|e| SettingsError::Generic {
                 message: format!("Error while fetching lockdown set: {}", e),
@@ -518,10 +517,11 @@ impl SettingDeleter for LockdownExecutor {
             })?;
 
         let lockdown_data = lockdowns::LockdownData {
-            cache_http: context.data.cache_http.clone(),
-            pool: context.data.pool.clone(),
-            reqwest: context.data.reqwest.clone(),
-            object_store: context.data.object_store.clone(),
+            cache: &context.data.serenity_context.cache,
+            http: &context.data.serenity_context.http,
+            pool: context.data.data.pool.clone(),
+            reqwest: context.data.data.reqwest.clone(),
+            object_store: context.data.data.object_store.clone(),
         };        
 
         // Remove the lockdown
