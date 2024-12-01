@@ -1,12 +1,12 @@
 mod cmd;
 
 use indexmap::indexmap;
+use modules::types::CommandExtendedData;
 use permissions::types::PermissionCheck;
-use silverpelt::types::CommandExtendedData;
 
 pub struct Module;
 
-impl silverpelt::module::Module for Module {
+impl modules::modules::Module for Module {
     fn id(&self) -> &'static str {
         "moderation"
     }
@@ -23,7 +23,7 @@ impl silverpelt::module::Module for Module {
         true
     }
 
-    fn raw_commands(&self) -> Vec<silverpelt::module::CommandObj> {
+    fn raw_commands(&self) -> Vec<modules::modules::CommandObj> {
         vec![
             (
                 cmd::prune(),

@@ -1,8 +1,8 @@
 use futures_util::StreamExt;
 use jobserver::embed::{embed as embed_job, get_icon_of_state};
+use modules::Context;
 use serenity::all::{ChannelId, CreateEmbed, EditMessage};
 use serenity::small_fixed_array::TruncatingInto;
-use silverpelt::Context;
 use silverpelt::Error;
 use splashcore_rs::utils::{
     create_special_allocation_from_str, parse_numeric_list, REPLACE_CHANNEL,
@@ -193,7 +193,17 @@ pub async fn backups_create(
             Ok(Some(job)) => {
                 let new_job_msg = embed_job(&config::CONFIG.sites.api, &job, vec![], true)?;
 
-                base_message.edit(ctx.clone(), new_job_msg).await?;
+                base_message
+                    .edit(ctx.clone(), {
+                        let mut msg = poise::CreateReply::new();
+                        for embed in new_job_msg.embeds {
+                            msg = msg.embed(embed);
+                        }
+                        msg = msg.components(new_job_msg.components);
+
+                        msg
+                    })
+                    .await?;
             }
             Ok(None) => {
                 continue; // Go to the next iteration
@@ -359,8 +369,8 @@ pub async fn backups_list(ctx: Context<'_>) -> Result<(), Error> {
             }
             "backups_restore" => {
                 // Check permission
-                let perm_res = permission_checks::check_command(
-                    &data.silverpelt_cache,
+                let perm_res = modules::permission_checks::check_command(
+                    &modules::module_cache(&data),
                     "backups restore",
                     guild_id,
                     ctx.author().id,
@@ -368,7 +378,7 @@ pub async fn backups_list(ctx: Context<'_>) -> Result<(), Error> {
                     ctx.serenity_context(),
                     &data.reqwest,
                     &Some(ctx),
-                    permission_checks::CheckCommandOptions::default(), // TODO: Maybe change this to allow backups restore to be disabled?
+                    modules::permission_checks::CheckCommandOptions::default(), // TODO: Maybe change this to allow backups restore to be disabled?
                 )
                 .await;
 
@@ -604,7 +614,17 @@ pub async fn backups_list(ctx: Context<'_>) -> Result<(), Error> {
                             let new_job_msg =
                                 embed_job(&config::CONFIG.sites.api, &job, vec![], true)?;
 
-                            base_message.edit(ctx.clone(), new_job_msg).await?;
+                            base_message
+                                .edit(ctx.clone(), {
+                                    let mut msg = poise::CreateReply::new();
+                                    for embed in new_job_msg.embeds {
+                                        msg = msg.embed(embed);
+                                    }
+                                    msg = msg.components(new_job_msg.components);
+
+                                    msg
+                                })
+                                .await?;
                         }
                         Ok(None) => {
                             continue; // Go to the next iteration
@@ -617,8 +637,8 @@ pub async fn backups_list(ctx: Context<'_>) -> Result<(), Error> {
             }
             "backups_delete" => {
                 // Check permission
-                let perm_res = permission_checks::check_command(
-                    &data.silverpelt_cache,
+                let perm_res = modules::permission_checks::check_command(
+                    &modules::module_cache(&data),
                     "backups delete",
                     guild_id,
                     ctx.author().id,
@@ -626,7 +646,7 @@ pub async fn backups_list(ctx: Context<'_>) -> Result<(), Error> {
                     ctx.serenity_context(),
                     &data.reqwest,
                     &Some(ctx),
-                    permission_checks::CheckCommandOptions::default(), // TODO: Maybe change this to allow backups delete to be disabled?
+                    modules::permission_checks::CheckCommandOptions::default(), // TODO: Maybe change this to allow backups delete to be disabled?
                 )
                 .await;
 
@@ -1169,7 +1189,17 @@ pub async fn backups_restore(
             Ok(Some(job)) => {
                 let new_job_msg = embed_job(&config::CONFIG.sites.api, &job, vec![], true)?;
 
-                base_message.edit(ctx.clone(), new_job_msg).await?;
+                base_message
+                    .edit(ctx.clone(), {
+                        let mut msg = poise::CreateReply::new();
+                        for embed in new_job_msg.embeds {
+                            msg = msg.embed(embed);
+                        }
+                        msg = msg.components(new_job_msg.components);
+
+                        msg
+                    })
+                    .await?;
             }
             Ok(None) => {
                 continue; // Go to the next iteration

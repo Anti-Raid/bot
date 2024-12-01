@@ -21,7 +21,7 @@ pub struct CmdArgs {
     pub shard_count: Option<u16>,
 }
 
-pub fn modules() -> Vec<Box<dyn silverpelt::module::Module>> {
+pub fn modules() -> Vec<Box<dyn modules::Module>> {
     bot_modules_default::modules()
 }
 

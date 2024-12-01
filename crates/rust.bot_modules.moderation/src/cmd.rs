@@ -1,11 +1,11 @@
 use futures_util::StreamExt;
 use jobserver::embed::{embed as embed_job, get_icon_of_state};
+use modules::Context;
 use poise::CreateReply;
 use sandwich_driver::{guild, member_in_guild};
 use serenity::all::{
     ChannelId, CreateEmbed, EditMember, EditMessage, GuildId, Mentionable, Timestamp, User, UserId,
 };
-use silverpelt::Context;
 use silverpelt::Error;
 use splashcore_rs::utils::{
     create_special_allocation_from_str, parse_duration_string, parse_numeric_list_to_str, Unit,
@@ -281,39 +281,24 @@ pub async fn prune(
             .await?;
     };
 
-    silverpelt::ar_event::dispatch_event_to_modules(&silverpelt::ar_event::EventHandlerContext {
-        guild_id,
-        data,
-        event: silverpelt::ar_event::AntiraidEvent::Custom(silverpelt::ar_event::CustomEvent {
-            event_name: "AR/PruneUser".to_string(),
-            event_titlename: "(Anti-Raid) Prune User".to_string(),
-            event_data: serde_json::json!({
-                "log": match user {
-                    Some(user) => to_log_format(&author.user, &user, &reason),
-                    None => format!("{} | Pruning messages for all users", username(&author.user)),
-                },
-                "prune_opts": prune_opts,
-                "channels": if let Some(ref channels) = prune_channels {
-                    parse_numeric_list_to_str::<ChannelId>(channels, &REPLACE_CHANNEL)?
-                } else {
-                    Vec::new()
-                },
-            }),
+    silverpelt::ar_event::AntiraidEvent::Custom(silverpelt::ar_event::CustomEvent {
+        event_name: "AR/PruneUser".to_string(),
+        event_titlename: "(Anti-Raid) Prune User".to_string(),
+        event_data: serde_json::json!({
+            "log": match user {
+                Some(user) => to_log_format(&author.user, &user, &reason),
+                None => format!("{} | Pruning messages for all users", username(&author.user)),
+            },
+            "prune_opts": prune_opts,
+            "channels": if let Some(ref channels) = prune_channels {
+                parse_numeric_list_to_str::<ChannelId>(channels, &REPLACE_CHANNEL)?
+            } else {
+                Vec::new()
+            },
         }),
-        serenity_context: ctx.serenity_context().clone(),
     })
-    .await
-    .map_err(|e| {
-        format!("Failed to dispatch event: {}", {
-            let mut strs = String::new();
-
-            for err in e {
-                strs.push_str(&format!("{}\n", err));
-            }
-
-            strs
-        })
-    })?;
+    .dispatch_to_template_worker(&data, guild_id)
+    .await?;
 
     embed = CreateEmbed::new()
         .title("Pruning User Messages...")
@@ -352,7 +337,17 @@ pub async fn prune(
                     prune_debug.unwrap_or(false),
                 )?;
 
-                base_message.edit(ctx.clone(), new_job_msg).await?;
+                base_message
+                    .edit(ctx.clone(), {
+                        let mut msg = CreateReply::new();
+                        for embed in new_job_msg.embeds {
+                            msg = msg.embed(embed);
+                        }
+                        msg = msg.components(new_job_msg.components);
+
+                        msg
+                    })
+                    .await?;
             }
             Ok(None) => {
                 continue; // Go to the next iteration
@@ -407,34 +402,19 @@ pub async fn kick(
         return Err("This command can only be used in a guild".into());
     };
 
-    silverpelt::ar_event::dispatch_event_to_modules(&silverpelt::ar_event::EventHandlerContext {
-        guild_id,
-        data: data.clone(),
-        event: silverpelt::ar_event::AntiraidEvent::Custom(silverpelt::ar_event::CustomEvent {
-            event_name: "AR/KickMember/Start".to_string(),
-            event_titlename: "(Anti-Raid) Kick Member (Pre-Warning)".to_string(),
-            event_data: serde_json::json!({
-                "target": member.clone(),
-                "moderator": author,
-                "reason": reason.clone(),
-                "stings": stings,
-                "log": to_log_format(&author.user, &member.user, &reason),
-            }),
+    silverpelt::ar_event::AntiraidEvent::Custom(silverpelt::ar_event::CustomEvent {
+        event_name: "AR/KickMember/Start".to_string(),
+        event_titlename: "(Anti-Raid) Kick Member (Pre-Warning)".to_string(),
+        event_data: serde_json::json!({
+            "target": member.clone(),
+            "moderator": author,
+            "reason": reason.clone(),
+            "stings": stings,
+            "log": to_log_format(&author.user, &member.user, &reason),
         }),
-        serenity_context: ctx.serenity_context().clone(),
     })
-    .await
-    .map_err(|e| {
-        format!("Failed to dispatch event: {}", {
-            let mut strs = String::new();
-
-            for err in e {
-                strs.push_str(&format!("{}\n", err));
-            }
-
-            strs
-        })
-    })?;
+    .dispatch_to_template_worker(&data, guild_id)
+    .await?;
 
     let mut embed = CreateEmbed::new()
         .title("Kicking Member...")
@@ -500,34 +480,19 @@ pub async fn kick(
 
     tx.commit().await?;
 
-    silverpelt::ar_event::dispatch_event_to_modules(&silverpelt::ar_event::EventHandlerContext {
-        guild_id,
-        data: data.clone(),
-        event: silverpelt::ar_event::AntiraidEvent::Custom(silverpelt::ar_event::CustomEvent {
-            event_name: "AR/KickMember/End".to_string(),
-            event_titlename: "(Anti-Raid) Kick Member (Post-Warning)".to_string(),
-            event_data: serde_json::json!({
-                "target": member,
-                "moderator": author,
-                "reason": reason.clone(),
-                "stings": stings,
-                "log": to_log_format(&author.user, &member.user, &reason),
-            }),
+    silverpelt::ar_event::AntiraidEvent::Custom(silverpelt::ar_event::CustomEvent {
+        event_name: "AR/KickMember/End".to_string(),
+        event_titlename: "(Anti-Raid) Kick Member (Post-Warning)".to_string(),
+        event_data: serde_json::json!({
+            "target": member,
+            "moderator": author,
+            "reason": reason.clone(),
+            "stings": stings,
+            "log": to_log_format(&author.user, &member.user, &reason),
         }),
-        serenity_context: ctx.serenity_context().clone(),
     })
-    .await
-    .map_err(|e| {
-        format!("Failed to dispatch event: {}", {
-            let mut strs = String::new();
-
-            for err in e {
-                strs.push_str(&format!("{}\n", err));
-            }
-
-            strs
-        })
-    })?;
+    .dispatch_to_template_worker(&data, guild_id)
+    .await?;
 
     p.dispatch_event(ctx.serenity_context().clone()).await?;
     if let Some(sting_dispatch) = sting_dispatch {
@@ -595,35 +560,20 @@ pub async fn ban(
         return Err("This command can only be used in a guild".into());
     };
 
-    silverpelt::ar_event::dispatch_event_to_modules(&silverpelt::ar_event::EventHandlerContext {
-        guild_id,
-        data: data.clone(),
-        event: silverpelt::ar_event::AntiraidEvent::Custom(silverpelt::ar_event::CustomEvent {
-            event_name: "AR/BanMember/Start".to_string(),
-            event_titlename: "(Anti-Raid) Ban Member (Pre-Warning)".to_string(),
-            event_data: serde_json::json!({
-                "target": member,
-                "moderator": author,
-                "reason": reason,
-                "stings": stings,
-                "prune_dmd": dmd,
-                "log": to_log_format(&author.user, &member, &reason),
-            }),
+    silverpelt::ar_event::AntiraidEvent::Custom(silverpelt::ar_event::CustomEvent {
+        event_name: "AR/BanMember/Start".to_string(),
+        event_titlename: "(Anti-Raid) Ban Member (Pre-Warning)".to_string(),
+        event_data: serde_json::json!({
+            "target": member,
+            "moderator": author,
+            "reason": reason,
+            "stings": stings,
+            "prune_dmd": dmd,
+            "log": to_log_format(&author.user, &member, &reason),
         }),
-        serenity_context: ctx.serenity_context().clone(),
     })
-    .await
-    .map_err(|e| {
-        format!("Failed to dispatch event: {}", {
-            let mut strs = String::new();
-
-            for err in e {
-                strs.push_str(&format!("{}\n", err));
-            }
-
-            strs
-        })
-    })?;
+    .dispatch_to_template_worker(&data, guild_id)
+    .await?;
 
     let mut embed = CreateEmbed::new()
         .title("Banning Member...")
@@ -690,35 +640,20 @@ pub async fn ban(
 
     tx.commit().await?;
 
-    silverpelt::ar_event::dispatch_event_to_modules(&silverpelt::ar_event::EventHandlerContext {
-        guild_id,
-        data: data.clone(),
-        event: silverpelt::ar_event::AntiraidEvent::Custom(silverpelt::ar_event::CustomEvent {
-            event_name: "AR/BanMember/End".to_string(),
-            event_titlename: "(Anti-Raid) Ban Member (Post-Warning)".to_string(),
-            event_data: serde_json::json!({
-                "target": member,
-                "moderator": author,
-                "reason": reason,
-                "stings": stings,
-                "prune_dmd": dmd,
-                "log": to_log_format(&author.user, &member, &reason),
-            }),
+    silverpelt::ar_event::AntiraidEvent::Custom(silverpelt::ar_event::CustomEvent {
+        event_name: "AR/BanMember/End".to_string(),
+        event_titlename: "(Anti-Raid) Ban Member (Post-Warning)".to_string(),
+        event_data: serde_json::json!({
+            "target": member,
+            "moderator": author,
+            "reason": reason,
+            "stings": stings,
+            "prune_dmd": dmd,
+            "log": to_log_format(&author.user, &member, &reason),
         }),
-        serenity_context: ctx.serenity_context().clone(),
     })
-    .await
-    .map_err(|e| {
-        format!("Failed to dispatch event: {}", {
-            let mut strs = String::new();
-
-            for err in e {
-                strs.push_str(&format!("{}\n", err));
-            }
-
-            strs
-        })
-    })?;
+    .dispatch_to_template_worker(&data, guild_id)
+    .await?;
 
     p.dispatch_event(ctx.serenity_context().clone()).await?;
     if let Some(sting_dispatch) = sting_dispatch {
@@ -789,36 +724,21 @@ pub async fn tempban(
         return Err("This command can only be used in a guild".into());
     };
 
-    silverpelt::ar_event::dispatch_event_to_modules(&silverpelt::ar_event::EventHandlerContext {
-        guild_id,
-        data: data.clone(),
-        event: silverpelt::ar_event::AntiraidEvent::Custom(silverpelt::ar_event::CustomEvent {
-            event_name: "AR/BanMemberTemporary/Start".to_string(),
-            event_titlename: "(Anti-Raid) Ban Member (Temporary) (Pre-Warning)".to_string(),
-            event_data: serde_json::json!({
-                "target": member,
-                "moderator": author,
-                "reason": reason,
-                "stings": stings,
-                "prune_dmd": dmd,
-                "log": to_log_format(&author.user, &member, &reason),
-                "duration": (duration.0 * duration.1.to_seconds()),
-            }),
+    silverpelt::ar_event::AntiraidEvent::Custom(silverpelt::ar_event::CustomEvent {
+        event_name: "AR/BanMemberTemporary/Start".to_string(),
+        event_titlename: "(Anti-Raid) Ban Member (Temporary) (Pre-Warning)".to_string(),
+        event_data: serde_json::json!({
+            "target": member,
+            "moderator": author,
+            "reason": reason,
+            "stings": stings,
+            "prune_dmd": dmd,
+            "log": to_log_format(&author.user, &member, &reason),
+            "duration": (duration.0 * duration.1.to_seconds()),
         }),
-        serenity_context: ctx.serenity_context().clone(),
     })
-    .await
-    .map_err(|e| {
-        format!("Failed to dispatch event: {}", {
-            let mut strs = String::new();
-
-            for err in e {
-                strs.push_str(&format!("{}\n", err));
-            }
-
-            strs
-        })
-    })?;
+    .dispatch_to_template_worker(&data, guild_id)
+    .await?;
 
     let mut embed = CreateEmbed::new()
         .title("(Temporarily) Banning Member...")
@@ -889,36 +809,21 @@ pub async fn tempban(
 
     tx.commit().await?;
 
-    silverpelt::ar_event::dispatch_event_to_modules(&silverpelt::ar_event::EventHandlerContext {
-        guild_id,
-        data: data.clone(),
-        event: silverpelt::ar_event::AntiraidEvent::Custom(silverpelt::ar_event::CustomEvent {
-            event_name: "AR/BanMemberTemporary/End".to_string(),
-            event_titlename: "(Anti-Raid) Ban Member (Temporary) (Post-Warning)".to_string(),
-            event_data: serde_json::json!({
-                "target": member,
-                "moderator": author,
-                "reason": reason,
-                "stings": stings,
-                "prune_dmd": dmd,
-                "log": to_log_format(&author.user, &member, &reason),
-                "duration": (duration.0 * duration.1.to_seconds()),
-            }),
+    silverpelt::ar_event::AntiraidEvent::Custom(silverpelt::ar_event::CustomEvent {
+        event_name: "AR/BanMemberTemporary/End".to_string(),
+        event_titlename: "(Anti-Raid) Ban Member (Temporary) (Post-Warning)".to_string(),
+        event_data: serde_json::json!({
+            "target": member,
+            "moderator": author,
+            "reason": reason,
+            "stings": stings,
+            "prune_dmd": dmd,
+            "log": to_log_format(&author.user, &member, &reason),
+            "duration": (duration.0 * duration.1.to_seconds()),
         }),
-        serenity_context: ctx.serenity_context().clone(),
     })
-    .await
-    .map_err(|e| {
-        format!("Failed to dispatch event: {}", {
-            let mut strs = String::new();
-
-            for err in e {
-                strs.push_str(&format!("{}\n", err));
-            }
-
-            strs
-        })
-    })?;
+    .dispatch_to_template_worker(&data, guild_id)
+    .await?;
 
     p.dispatch_event(ctx.serenity_context().clone()).await?;
     if let Some(sting_dispatch) = sting_dispatch {
@@ -978,34 +883,19 @@ pub async fn unban(
         return Err("This command can only be used in a guild".into());
     };
 
-    silverpelt::ar_event::dispatch_event_to_modules(&silverpelt::ar_event::EventHandlerContext {
-        guild_id,
-        data: data.clone(),
-        event: silverpelt::ar_event::AntiraidEvent::Custom(silverpelt::ar_event::CustomEvent {
-            event_name: "AR/UnbanMember/Start".to_string(),
-            event_titlename: "(Anti-Raid) Unban Member (Pre-Warning)".to_string(),
-            event_data: serde_json::json!({
-                "target": user,
-                "moderator": author,
-                "reason": reason,
-                "stings": stings,
-                "log": to_log_format(&author.user, &user, &reason),
-            }),
+    silverpelt::ar_event::AntiraidEvent::Custom(silverpelt::ar_event::CustomEvent {
+        event_name: "AR/UnbanMember/Start".to_string(),
+        event_titlename: "(Anti-Raid) Unban Member (Pre-Warning)".to_string(),
+        event_data: serde_json::json!({
+            "target": user,
+            "moderator": author,
+            "reason": reason,
+            "stings": stings,
+            "log": to_log_format(&author.user, &user, &reason),
         }),
-        serenity_context: ctx.serenity_context().clone(),
     })
-    .await
-    .map_err(|e| {
-        format!("Failed to dispatch event: {}", {
-            let mut strs = String::new();
-
-            for err in e {
-                strs.push_str(&format!("{}\n", err));
-            }
-
-            strs
-        })
-    })?;
+    .dispatch_to_template_worker(&data, guild_id)
+    .await?;
 
     let mut embed = CreateEmbed::new()
         .title("Unbanning Member...")
@@ -1055,34 +945,19 @@ pub async fn unban(
 
     tx.commit().await?;
 
-    silverpelt::ar_event::dispatch_event_to_modules(&silverpelt::ar_event::EventHandlerContext {
-        guild_id,
-        data: data.clone(),
-        event: silverpelt::ar_event::AntiraidEvent::Custom(silverpelt::ar_event::CustomEvent {
-            event_name: "AR/UnbanMember/End".to_string(),
-            event_titlename: "(Anti-Raid) Unban Member (Post-Warning)".to_string(),
-            event_data: serde_json::json!({
-                "target": user,
-                "moderator": author,
-                "reason": reason,
-                "stings": stings,
-                "log": to_log_format(&author.user, &user, &reason),
-            }),
+    silverpelt::ar_event::AntiraidEvent::Custom(silverpelt::ar_event::CustomEvent {
+        event_name: "AR/UnbanMember/End".to_string(),
+        event_titlename: "(Anti-Raid) Unban Member (Post-Warning)".to_string(),
+        event_data: serde_json::json!({
+            "target": user,
+            "moderator": author,
+            "reason": reason,
+            "stings": stings,
+            "log": to_log_format(&author.user, &user, &reason),
         }),
-        serenity_context: ctx.serenity_context().clone(),
     })
-    .await
-    .map_err(|e| {
-        format!("Failed to dispatch event: {}", {
-            let mut strs = String::new();
-
-            for err in e {
-                strs.push_str(&format!("{}\n", err));
-            }
-
-            strs
-        })
-    })?;
+    .dispatch_to_template_worker(&data, guild_id)
+    .await?;
 
     if let Some(sting_dispatch) = sting_dispatch {
         sting_dispatch
@@ -1165,35 +1040,20 @@ pub async fn timeout(
         return Err("This command can only be used in a guild".into());
     };
 
-    silverpelt::ar_event::dispatch_event_to_modules(&silverpelt::ar_event::EventHandlerContext {
-        guild_id,
-        data: data.clone(),
-        event: silverpelt::ar_event::AntiraidEvent::Custom(silverpelt::ar_event::CustomEvent {
-            event_name: "AR/TimeoutMember/Start".to_string(),
-            event_titlename: "(Anti-Raid) Timeout Member (Pre-Warning)".to_string(),
-            event_data: serde_json::json!({
-                "target": member,
-                "moderator": author.user,
-                "reason": reason,
-                "stings": stings,
-                "log": to_log_format(&author.user, &member.user, &reason),
-                "duration": (duration.0 * duration.1.to_seconds()),
-            }),
+    silverpelt::ar_event::AntiraidEvent::Custom(silverpelt::ar_event::CustomEvent {
+        event_name: "AR/TimeoutMember/Start".to_string(),
+        event_titlename: "(Anti-Raid) Timeout Member (Pre-Warning)".to_string(),
+        event_data: serde_json::json!({
+            "target": member,
+            "moderator": author.user,
+            "reason": reason,
+            "stings": stings,
+            "log": to_log_format(&author.user, &member.user, &reason),
+            "duration": (duration.0 * duration.1.to_seconds()),
         }),
-        serenity_context: ctx.serenity_context().clone(),
     })
-    .await
-    .map_err(|e| {
-        format!("Failed to dispatch event: {}", {
-            let mut strs = String::new();
-
-            for err in e {
-                strs.push_str(&format!("{}\n", err));
-            }
-
-            strs
-        })
-    })?;
+    .dispatch_to_template_worker(&data, guild_id)
+    .await?;
 
     let mut embed = CreateEmbed::new()
         .title("Timing out Member...")
@@ -1273,35 +1133,20 @@ pub async fn timeout(
             .await?;
     };
 
-    silverpelt::ar_event::dispatch_event_to_modules(&silverpelt::ar_event::EventHandlerContext {
-        guild_id,
-        data: data.clone(),
-        event: silverpelt::ar_event::AntiraidEvent::Custom(silverpelt::ar_event::CustomEvent {
-            event_name: "AR/TimeoutMember/End".to_string(),
-            event_titlename: "(Anti-Raid) Timeout Member (Post-Warning)".to_string(),
-            event_data: serde_json::json!({
-                "target": member,
-                "moderator": author,
-                "reason": reason,
-                "stings": stings,
-                "log": to_log_format(&author.user, &member.user, &reason),
-                "duration": (duration.0 * duration.1.to_seconds()),
-            }),
+    silverpelt::ar_event::AntiraidEvent::Custom(silverpelt::ar_event::CustomEvent {
+        event_name: "AR/TimeoutMember/End".to_string(),
+        event_titlename: "(Anti-Raid) Timeout Member (Post-Warning)".to_string(),
+        event_data: serde_json::json!({
+            "target": member,
+            "moderator": author,
+            "reason": reason,
+            "stings": stings,
+            "log": to_log_format(&author.user, &member.user, &reason),
+            "duration": (duration.0 * duration.1.to_seconds()),
         }),
-        serenity_context: ctx.serenity_context().clone(),
     })
-    .await
-    .map_err(|e| {
-        format!("Failed to dispatch event: {}", {
-            let mut strs = String::new();
-
-            for err in e {
-                strs.push_str(&format!("{}\n", err));
-            }
-
-            strs
-        })
-    })?;
+    .dispatch_to_template_worker(&data, guild_id)
+    .await?;
 
     embed = CreateEmbed::new()
         .title("Timed Out Member...")

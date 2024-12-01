@@ -19,6 +19,7 @@ permissions = { path = "../../../../core/rust/rust.permissions" }
 config = { path = "../../../../core/rust/rust.config" }
 sandwich_driver = { path = "../../../../core/rust/rust.sandwich_driver" }
 jobserver = { path = "../../../../core/rust/rust.jobserver" }
+modules = { path = "../rust.modules" }
 
 [dependencies.serenity]
 git = "https://github.com/Anti-Raid/serenity"

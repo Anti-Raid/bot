@@ -13,7 +13,7 @@ async fn check_perms<'a>(
     ctx: &HookContext<'a>,
     perm: &kittycat::perms::Permission,
 ) -> Result<(), SettingsError> {
-    let res = permission_checks::member_has_kittycat_perm(
+    let res = modules::permission_checks::member_has_kittycat_perm(
         ctx.guild_id,
         ctx.author,
         &ctx.data.pool,
@@ -21,7 +21,7 @@ async fn check_perms<'a>(
         &ctx.data.reqwest,
         &None,
         perm,
-        permission_checks::CheckCommandOptions::default(),
+        modules::permission_checks::CheckCommandOptions::default(),
     )
     .await;
 
@@ -1325,7 +1325,7 @@ impl GuildTemplateExecutor {
         silverpelt::ar_event::dispatch_event_to_modules(
             &silverpelt::ar_event::EventHandlerContext {
                 guild_id: ctx.guild_id,
-                data: silverpelt::data::Data::get_data(ctx.data),
+                data: modules::get_data(ctx.data),
                 event: silverpelt::ar_event::AntiraidEvent::OnStartup(vec![name.to_string()]),
                 serenity_context: ctx.data.serenity_context.clone(),
             },

@@ -1,5 +1,5 @@
+use modules::Context;
 use serenity::all::{AutocompleteChoice, CreateAutocompleteResponse};
-use silverpelt::Context;
 use silverpelt::Error;
 
 async fn module_list_autocomplete<'a>(
@@ -7,9 +7,10 @@ async fn module_list_autocomplete<'a>(
     partial: &'a str,
 ) -> CreateAutocompleteResponse<'a> {
     let data = ctx.data();
+    let modules_cache = modules::module_cache(&data);
     let mut ac = Vec::new();
 
-    for refs in data.silverpelt_cache.module_cache.iter() {
+    for refs in modules_cache.module_cache.iter() {
         let module = refs.value();
         if module
             .name()
@@ -42,6 +43,7 @@ pub async fn modules_list(ctx: Context<'_>) -> Result<(), Error> {
     };
 
     let data = ctx.data();
+    let modules_cache = modules::module_cache(&data);
 
     let module_configs = sqlx::query!(
         "SELECT module, disabled FROM guild_module_configurations WHERE guild_id = $1",
@@ -54,11 +56,7 @@ pub async fn modules_list(ctx: Context<'_>) -> Result<(), Error> {
 
     let mut done_modules = Vec::new();
     for module_config in module_configs {
-        let Some(module) = data
-            .silverpelt_cache
-            .module_cache
-            .get(&module_config.module)
-        else {
+        let Some(module) = modules_cache.module_cache.get(&module_config.module) else {
             continue;
         };
 
@@ -87,7 +85,7 @@ pub async fn modules_list(ctx: Context<'_>) -> Result<(), Error> {
         done_modules.push(module_id);
     }
 
-    for refs in data.silverpelt_cache.module_cache.iter() {
+    for refs in modules_cache.module_cache.iter() {
         let module = refs.value();
         if done_modules.contains(&module.id().to_string()) {
             continue;
@@ -128,9 +126,10 @@ pub async fn modules_enable(
     };
 
     let data = ctx.data();
+    let module_cache = modules::module_cache(&data);
 
     // Check that the module exists
-    let Some(module_data) = data.silverpelt_cache.module_cache.get(&module) else {
+    let Some(module_data) = module_cache.module_cache.get(&module) else {
         return Err(format!(
             "The module you are trying to disable ({}) does not exist",
             module
@@ -180,7 +179,7 @@ pub async fn modules_enable(
 
     tx.commit().await?;
 
-    data.silverpelt_cache
+    module_cache
         .module_enabled_cache
         .invalidate(&(guild_id, module))
         .await;
@@ -208,9 +207,10 @@ pub async fn modules_disable(
     };
 
     let data = ctx.data();
+    let module_cache = modules::module_cache(&data);
 
     // Check that the module exists
-    let Some(module_data) = data.silverpelt_cache.module_cache.get(&module) else {
+    let Some(module_data) = module_cache.module_cache.get(&module) else {
         return Err(format!(
             "The module you are trying to disable ({}) does not exist",
             module
@@ -260,7 +260,7 @@ pub async fn modules_disable(
 
     tx.commit().await?;
 
-    data.silverpelt_cache
+    module_cache
         .module_enabled_cache
         .invalidate(&(guild_id, module))
         .await;

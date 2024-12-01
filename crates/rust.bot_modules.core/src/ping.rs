@@ -4,7 +4,7 @@ use poise::{serenity_prelude::CreateEmbed, CreateReply};
 use serenity::builder::EditMessage;
 
 type Error = silverpelt::Error;
-type Context<'a> = silverpelt::Context<'a>;
+type Context<'a> = modules::Context<'a>;
 
 #[poise::command(category = "Stats", slash_command, user_cooldown = 1)]
 pub async fn ping(ctx: Context<'_>) -> Result<(), Error> {

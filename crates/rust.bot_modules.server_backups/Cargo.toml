@@ -15,7 +15,7 @@ indexmap = { version = "2", features = ["serde"] }
 
 # Anti-Raid specific
 silverpelt = { path = "../../../../core/rust/rust.silverpelt" }
-permission_checks = { path = "../../../../core/rust/rust.permissions.checks" }
+modules = { path = "../rust.modules" }
 splashcore_rs = { path = "../../../../core/rust/rust.std" }
 config = { path = "../../../../core/rust/rust.config" }
 jobserver = { path = "../../../../core/rust/rust.jobserver" }

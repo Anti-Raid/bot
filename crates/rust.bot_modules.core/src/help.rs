@@ -1,6 +1,6 @@
 use futures_util::future::FutureExt;
+use modules::Context;
 use permissions::types::PermissionResult;
-use silverpelt::Context;
 use silverpelt::Error;
 
 pub async fn filter(
@@ -29,8 +29,8 @@ pub async fn filter(
 
         let data = ctx.data();
 
-        let res = permission_checks::check_command(
-            &data.silverpelt_cache,
+        let res = modules::permission_checks::check_command(
+            &modules::module_cache(&data),
             &cmd.qualified_name,
             guild_id,
             ctx.author().id,
@@ -38,7 +38,7 @@ pub async fn filter(
             ctx.serenity_context(),
             &data.reqwest,
             &Some(*ctx),
-            permission_checks::CheckCommandOptions::default(),
+            modules::permission_checks::CheckCommandOptions::default(),
         )
         .await;
 
@@ -66,7 +66,7 @@ pub async fn help(
     #[description = "Only show commands you have permission to use"] filter_by_perms: Option<bool>,
 ) -> Result<(), Error> {
     let data = ctx.data();
-    let data = data.clone();
+    let modules_cache = modules::module_cache(&data);
     botox::help::help(
         ctx,
         command,
@@ -75,7 +75,7 @@ pub async fn help(
             get_category: Some(Box::new(move |category_id| {
                 if let Some(cat_name) = category_id {
                     // Get the module from the name
-                    let cat_module = data.silverpelt_cache.module_cache.get(&cat_name);
+                    let cat_module = modules_cache.module_cache.get(&cat_name);
 
                     if let Some(cat_module) = cat_module {
                         Some(cat_module.name().to_string())

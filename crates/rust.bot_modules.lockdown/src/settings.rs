@@ -9,7 +9,7 @@ async fn check_perms<'a>(
     ctx: &HookContext<'a>,
     perm: &kittycat::perms::Permission,
 ) -> Result<(), SettingsError> {
-    let res = permission_checks::member_has_kittycat_perm(
+    let res = modules::permission_checks::member_has_kittycat_perm(
         ctx.guild_id,
         ctx.author,
         &ctx.data.pool,
@@ -17,7 +17,7 @@ async fn check_perms<'a>(
         &ctx.data.reqwest,
         &None,
         perm,
-        permission_checks::CheckCommandOptions::default(),
+        modules::permission_checks::CheckCommandOptions::default(),
     )
     .await;
 
@@ -375,8 +375,9 @@ impl SettingCreator for LockdownExecutor {
     ) -> Result<indexmap::IndexMap<String, splashcore_rs::value::Value>, SettingsError> {
         check_perms(&context, &"lockdowns.create".into()).await?;
 
-        let silverpelt_cache = silverpelt::data::Data::silverpelt_cache(&context.data);
-        if !silverpelt::module_config::is_module_enabled(&silverpelt_cache, &context.data.pool, context.guild_id, "lockdown")
+        let data = modules::get_data(&context.data);
+        let modules_cache = modules::module_cache(&data);
+        if !modules::module_config::is_module_enabled(&modules_cache, &context.data.pool, context.guild_id, "lockdown")
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Error while checking if module is enabled: {}", e),
@@ -473,8 +474,9 @@ impl SettingDeleter for LockdownExecutor {
     ) -> Result<(), SettingsError> {
         check_perms(&context, &"lockdowns.delete".into()).await?;
         
-        let silverpelt_cache = silverpelt::data::Data::silverpelt_cache(&context.data);
-        if !silverpelt::module_config::is_module_enabled(&silverpelt_cache, &context.data.pool, context.guild_id, "lockdown")
+        let data = modules::get_data(&context.data);
+        let modules_cache = modules::module_cache(&data);
+        if !modules::module_config::is_module_enabled(&modules_cache, &context.data.pool, context.guild_id, "lockdown")
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Error while checking if module is enabled: {}", e),

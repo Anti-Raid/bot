@@ -13,19 +13,18 @@ futures-util = "0.3"
 async-trait = "0.1"
 serde_json = "1.0"
 indexmap = { version = "2", features = ["serde"] }
+log = "0.4"
 
 # Anti-Raid specific
 silverpelt = { path = "../../../../core/rust/rust.silverpelt" }
 permissions = { path = "../../../../core/rust/rust.permissions" }
-permission_checks = { path = "../../../../core/rust/rust.permissions.checks" }
+modules = { path = "../rust.modules" }
 config = { path = "../../../../core/rust/rust.config" }
 sandwich_driver = { path = "../../../../core/rust/rust.sandwich_driver" }
 rust_buildstats = { path = "../rust.buildstats" }
 ar_settings = { path = "../../../../core/rust/rust.settings" }
 splashcore_rs = { path = "../../../../core/rust/rust.std" }
-templating = { path = "../../../../core/rust/rust.templating" }
 gwevent = { path = "../../../../core/rust/rust.gwevent" }
-log = "0.4"
 
 [dependencies.serenity]
 git = "https://github.com/Anti-Raid/serenity"

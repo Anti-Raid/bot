@@ -5,7 +5,7 @@ use rust_buildstats::{
 use sqlx::types::chrono;
 
 type Error = silverpelt::Error;
-type Context<'a> = silverpelt::Context<'a>;
+type Context<'a> = modules::Context<'a>;
 
 #[poise::command(category = "Stats", slash_command, user_cooldown = 1)]
 pub async fn stats(ctx: Context<'_>) -> Result<(), Error> {

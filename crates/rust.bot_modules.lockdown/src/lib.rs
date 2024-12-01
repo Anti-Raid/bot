@@ -1,11 +1,11 @@
 pub mod cmds;
 pub mod settings;
 
-use silverpelt::types::CommandExtendedData;
+use ::modules::types::CommandExtendedData;
 
 pub struct Module;
 
-impl silverpelt::module::Module for Module {
+impl ::modules::modules::Module for Module {
     fn id(&self) -> &'static str {
         "lockdown"
     }
@@ -25,7 +25,7 @@ impl silverpelt::module::Module for Module {
         ]
     }
 
-    fn raw_commands(&self) -> Vec<silverpelt::module::CommandObj> {
+    fn raw_commands(&self) -> Vec<modules::modules::CommandObj> {
         vec![(
             cmds::lockdowns(),
             indexmap::indexmap! {
