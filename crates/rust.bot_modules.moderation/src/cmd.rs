@@ -236,8 +236,7 @@ async fn prune(
     if stings > 0 {
         sting_dispatch = Some(
             silverpelt::stings::StingCreate {
-                module: "moderation".to_string(),
-                src: Some("prune_user".to_string()),
+                src: Some("moderation:prune_user".to_string()),
                 stings,
                 reason: Some(reason.clone()),
                 void_reason: None,
@@ -454,8 +453,7 @@ async fn kick(
     if stings > 0 {
         sting_dispatch = Some(
             silverpelt::stings::StingCreate {
-                module: "moderation".to_string(),
-                src: Some("kick".to_string()),
+                src: Some("moderation:kick".to_string()),
                 stings,
                 reason: Some(reason.clone()),
                 void_reason: None,
@@ -612,8 +610,7 @@ async fn ban(
     if stings > 0 {
         sting_dispatch = Some(
             silverpelt::stings::StingCreate {
-                module: "moderation".to_string(),
-                src: Some("ban".to_string()),
+                src: Some("moderation:ban".to_string()),
                 stings,
                 reason: Some(reason.clone()),
                 void_reason: None,
@@ -777,8 +774,7 @@ async fn tempban(
     if stings > 0 {
         sting_dispatch = Some(
             silverpelt::stings::StingCreate {
-                module: "moderation".to_string(),
-                src: Some("tempban".to_string()),
+                src: Some("moderation:tempban".to_string()),
                 stings,
                 reason: Some(reason.clone()),
                 void_reason: None,
@@ -934,8 +930,7 @@ async fn unban(
     if stings > 0 {
         sting_dispatch = Some(
             silverpelt::stings::StingCreate {
-                module: "moderation".to_string(),
-                src: Some("unban".to_string()),
+                src: Some("moderation:unban".to_string()),
                 stings,
                 reason: Some(reason.clone()),
                 void_reason: None,
@@ -1092,8 +1087,7 @@ async fn timeout(
     if stings > 0 {
         sting_dispatch = Some(
             silverpelt::stings::StingCreate {
-                module: "moderation".to_string(),
-                src: Some("timeout".to_string()),
+                src: Some("moderation:timeout".to_string()),
                 stings,
                 reason: Some(reason.clone()),
                 void_reason: None,
