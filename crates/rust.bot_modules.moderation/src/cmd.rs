@@ -14,7 +14,7 @@ use splashcore_rs::utils::{
 use std::collections::HashMap;
 
 /// Helper method to get the username of a user
-pub fn username(m: &User) -> String {
+fn username(m: &User) -> String {
     if let Some(ref global_name) = m.global_name {
         global_name.to_string()
     } else {
@@ -23,7 +23,7 @@ pub fn username(m: &User) -> String {
 }
 
 /// Helper method to get the username of a member
-pub fn to_log_format(moderator: &User, member: &User, reason: &str) -> String {
+fn to_log_format(moderator: &User, member: &User, reason: &str) -> String {
     format!(
         "{} | Handled '{}' for reason '{}'",
         username(moderator),
@@ -151,6 +151,18 @@ async fn check_hierarchy(ctx: &Context<'_>, user_id: UserId) -> Result<(), Error
     }
 }
 
+/// Moderation base command
+#[poise::command(
+    slash_command,
+    guild_only,
+    user_cooldown = "5",
+    subcommands("prune", "kick", "ban", "tempban", "unban", "timeout",)
+)]
+#[allow(clippy::too_many_arguments)]
+pub async fn moderation(_ctx: Context<'_>) -> Result<(), Error> {
+    Ok(())
+}
+
 /// Customizable pruning of messages
 #[poise::command(
     slash_command,
@@ -159,7 +171,7 @@ async fn check_hierarchy(ctx: &Context<'_>, user_id: UserId) -> Result<(), Error
     required_bot_permissions = "KICK_MEMBERS | MANAGE_MESSAGES"
 )]
 #[allow(clippy::too_many_arguments)]
-pub async fn prune(
+async fn prune(
     ctx: Context<'_>,
     #[description = "The reason for the prune"]
     #[max_length = 512]
@@ -372,7 +384,7 @@ pub async fn prune(
     user_cooldown = "5",
     required_bot_permissions = "KICK_MEMBERS | MANAGE_MESSAGES"
 )]
-pub async fn kick(
+async fn kick(
     ctx: Context<'_>,
     #[description = "The member to kick"] member: serenity::all::Member,
     #[description = "The reason for the kick"]
@@ -527,7 +539,7 @@ pub async fn kick(
     user_cooldown = "5",
     required_bot_permissions = "BAN_MEMBERS | MANAGE_MESSAGES"
 )]
-pub async fn ban(
+async fn ban(
     ctx: Context<'_>,
     #[description = "The member to ban"] member: serenity::all::User,
     #[description = "The reason for the ban"]
@@ -688,7 +700,7 @@ pub async fn ban(
     user_cooldown = "5",
     required_bot_permissions = "BAN_MEMBERS | MANAGE_MESSAGES"
 )]
-pub async fn tempban(
+async fn tempban(
     ctx: Context<'_>,
     #[description = "The member to ban"] member: serenity::all::User,
     #[description = "The reason for the ban"]
@@ -858,7 +870,7 @@ pub async fn tempban(
     user_cooldown = "5",
     required_bot_permissions = "BAN_MEMBERS | MANAGE_MESSAGES"
 )]
-pub async fn unban(
+async fn unban(
     ctx: Context<'_>,
     #[description = "The user to unban"] user: serenity::all::User,
     #[description = "The reason/justification for unbanning"]
@@ -991,7 +1003,7 @@ pub async fn unban(
     user_cooldown = "5",
     required_bot_permissions = "MODERATE_MEMBERS | MANAGE_MESSAGES"
 )]
-pub async fn timeout(
+async fn timeout(
     ctx: Context<'_>,
     #[description = "The member to timeout"] mut member: serenity::all::Member,
     #[description = "The duration of the timeout"] duration: String,
