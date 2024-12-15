@@ -32,6 +32,11 @@ pub fn create_bot_rpc_server(
             "/check-command-permission/:guild_id/:user_id",
             get(check_command_permission),
         )
+        // Checks if a user has a given permission [CheckPermission]
+        .route(
+            "/check-user-has-permission/:guild_id/:user_id",
+            post(check_user_has_permission),
+        )
         // Verify/parse a set of permission checks returning the parsed checks [ParsePermissionChecks]
         .route("/parse-permission-checks", get(parse_permission_checks))
         // Clears the modules enabled cache [ClearModulesEnabledCache]
@@ -202,6 +207,49 @@ async fn base_guild_user_info(
         bot_roles: bot_user.roles.to_vec(),
         channels: channels_with_permissions,
     }))
+}
+
+/// Checks if a user has a given permission [CheckPermission]
+#[axum::debug_handler]
+async fn check_user_has_permission(
+    State(AppData {
+        data,
+        serenity_context,
+        ..
+    }): State<AppData>,
+    Path((guild_id, user_id)): Path<(serenity::all::GuildId, serenity::all::UserId)>,
+    Json(perms): Json<types::CheckUserHasKittycatPermissionsRequest>,
+) -> Response<permissions::types::PermissionResult> {
+    let opts = perms.opts;
+
+    let flags = crate::types::RpcCheckCommandOptionsFlags::from_bits_truncate(opts.flags);
+
+    let perms = modules::permission_checks::member_has_kittycat_perm(
+        guild_id,
+        user_id,
+        &data.pool,
+        &serenity_context,
+        &data.reqwest,
+        &None,
+        &kittycat::perms::Permission::from_string(&perms.perm),
+        modules::permission_checks::CheckCommandOptions {
+            ignore_module_disabled: flags
+                .contains(crate::types::RpcCheckCommandOptionsFlags::IGNORE_MODULE_DISABLED),
+            ignore_command_disabled: flags
+                .contains(crate::types::RpcCheckCommandOptionsFlags::IGNORE_COMMAND_DISABLED),
+            custom_resolved_kittycat_perms: opts.custom_resolved_kittycat_perms.map(|crkp| {
+                crkp.iter()
+                    .map(|x| kittycat::perms::Permission::from_string(x))
+                    .collect::<Vec<kittycat::perms::Permission>>()
+            }),
+            custom_command_configuration: opts.custom_command_configuration.map(|x| *x),
+            custom_module_configuration: opts.custom_module_configuration.map(|x| *x),
+            channel_id: opts.channel_id,
+        },
+    )
+    .await;
+
+    Ok(Json(perms))
 }
 
 /// Returns if the user has permission to run a command on a given guild [CheckCommandPermission]

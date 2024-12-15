@@ -16,7 +16,7 @@ pub(crate) async fn settings_operation(
     Path((guild_id, user_id)): Path<(serenity::all::GuildId, serenity::all::UserId)>,
     Json(req): Json<crate::types::SettingsOperationRequest>,
 ) -> Json<crate::types::CanonicalSettingsResult> {
-    let op: OperationType = req.op.into();
+    let op: OperationType = req.op;
 
     // Find the setting
     let mut setting = None;
@@ -52,7 +52,7 @@ pub(crate) async fn settings_operation(
             .await
             {
                 Ok(res) => Json(CanonicalSettingsResult::Ok { fields: res }),
-                Err(e) => Json(CanonicalSettingsResult::Err { error: e.into() }),
+                Err(e) => Json(CanonicalSettingsResult::Err { error: e }),
             }
         }
         OperationType::Create => {
@@ -66,7 +66,7 @@ pub(crate) async fn settings_operation(
             .await
             {
                 Ok(res) => Json(CanonicalSettingsResult::Ok { fields: vec![res] }),
-                Err(e) => Json(CanonicalSettingsResult::Err { error: e.into() }),
+                Err(e) => Json(CanonicalSettingsResult::Err { error: e }),
             }
         }
         OperationType::Update => {
@@ -80,7 +80,7 @@ pub(crate) async fn settings_operation(
             .await
             {
                 Ok(res) => Json(CanonicalSettingsResult::Ok { fields: vec![res] }),
-                Err(e) => Json(CanonicalSettingsResult::Err { error: e.into() }),
+                Err(e) => Json(CanonicalSettingsResult::Err { error: e }),
             }
         }
         OperationType::Delete => {
@@ -103,7 +103,7 @@ pub(crate) async fn settings_operation(
             .await
             {
                 Ok(_res) => Json(CanonicalSettingsResult::Ok { fields: vec![] }),
-                Err(e) => Json(CanonicalSettingsResult::Err { error: e.into() }),
+                Err(e) => Json(CanonicalSettingsResult::Err { error: e }),
             }
         }
     }

@@ -114,3 +114,9 @@ pub enum ExecuteTemplateResponse {
     ExecErr { error: String },
     PermissionError { res: PermissionResult },
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CheckUserHasKittycatPermissionsRequest {
+    pub perm: String,
+    pub opts: RpcCheckCommandOptions,
+}

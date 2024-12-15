@@ -388,14 +388,20 @@ pub async fn check_command(
     }
 
     // Try getting guild+member from cache to speed up response times first
-    let (is_owner, guild_owner_id, member_perms, roles) =
-        match get_user_discord_info(guild_id, user_id, &serenity_context, reqwest, poise_ctx).await
-        {
-            Ok(v) => v,
-            Err(e) => {
-                return e;
-            }
-        };
+    let (is_owner, guild_owner_id, member_perms, roles) = match get_user_discord_info(
+        guild_id,
+        user_id,
+        serenity_context,
+        reqwest,
+        poise_ctx,
+    )
+    .await
+    {
+        Ok(v) => v,
+        Err(e) => {
+            return e;
+        }
+    };
 
     if is_owner {
         return PermissionResult::OkWithMessage {
@@ -477,14 +483,20 @@ pub async fn member_has_kittycat_perm(
     opts: CheckCommandOptions,
 ) -> PermissionResult {
     // Try getting guild+member from cache to speed up response times first
-    let (is_owner, guild_owner_id, member_perms, roles) =
-        match get_user_discord_info(guild_id, user_id, &serenity_context, reqwest, poise_ctx).await
-        {
-            Ok(v) => v,
-            Err(e) => {
-                return e;
-            }
-        };
+    let (is_owner, guild_owner_id, member_perms, roles) = match get_user_discord_info(
+        guild_id,
+        user_id,
+        serenity_context,
+        reqwest,
+        poise_ctx,
+    )
+    .await
+    {
+        Ok(v) => v,
+        Err(e) => {
+            return e;
+        }
+    };
 
     if is_owner {
         return PermissionResult::OkWithMessage {

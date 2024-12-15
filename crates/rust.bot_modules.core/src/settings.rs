@@ -1681,7 +1681,7 @@ impl SettingView for GuildTemplatesKVExecutor {
         for row in rows {
             let map = indexmap::indexmap! {
                 "key".to_string() => Value::String(row.key),
-                "value".to_string() => row.value.map(|x| Value::Json(x)).unwrap_or(Value::None),
+                "value".to_string() => row.value.map(Value::Json).unwrap_or(Value::None),
                 "created_at".to_string() => Value::TimestampTz(row.created_at),
                 "last_updated_at".to_string() => Value::TimestampTz(row.last_updated_at),
             };

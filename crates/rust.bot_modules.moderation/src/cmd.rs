@@ -328,7 +328,7 @@ async fn prune(
         );
 
     base_message
-        .edit(ctx.clone(), CreateReply::new().embed(embed.clone()))
+        .edit(ctx, CreateReply::new().embed(embed.clone()))
         .await?;
 
     let mut stream = Box::pin(jobserver::poll::reactive(
@@ -353,7 +353,7 @@ async fn prune(
                 )?;
 
                 base_message
-                    .edit(ctx.clone(), {
+                    .edit(ctx, {
                         let mut msg = CreateReply::new();
                         for embed in new_job_msg.embeds {
                             msg = msg.embed(embed);

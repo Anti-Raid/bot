@@ -170,7 +170,7 @@ pub async fn backups_create(
 
     base_message
         .edit(
-            ctx.clone(),
+            ctx,
             poise::CreateReply::default().embed(
                 CreateEmbed::default()
                     .title("Creating Backup...")
@@ -194,7 +194,7 @@ pub async fn backups_create(
                 let new_job_msg = embed_job(&config::CONFIG.sites.api, &job, vec![], true)?;
 
                 base_message
-                    .edit(ctx.clone(), {
+                    .edit(ctx, {
                         let mut msg = poise::CreateReply::new();
                         for embed in new_job_msg.embeds {
                             msg = msg.embed(embed);
@@ -539,7 +539,7 @@ pub async fn backups_list(ctx: Context<'_>) -> Result<(), Error> {
                 let job = &backup_jobs[index];
 
                 let url = {
-                    if job.format_owner_simplex() != format!("g/{}", guild_id) {
+                    if job.guild_id != guild_id {
                         return Err("Backup is not owned by this server".into());
                     }
 
@@ -590,7 +590,7 @@ pub async fn backups_list(ctx: Context<'_>) -> Result<(), Error> {
 
                 base_message
                     .edit(
-                        ctx.clone(),
+                        ctx,
                         poise::CreateReply::default().embed(
                             CreateEmbed::default()
                                 .title("Restoring Backup...")
@@ -615,7 +615,7 @@ pub async fn backups_list(ctx: Context<'_>) -> Result<(), Error> {
                                 embed_job(&config::CONFIG.sites.api, &job, vec![], true)?;
 
                             base_message
-                                .edit(ctx.clone(), {
+                                .edit(ctx, {
                                     let mut msg = poise::CreateReply::new();
                                     for embed in new_job_msg.embeds {
                                         msg = msg.embed(embed);
@@ -1074,7 +1074,7 @@ pub async fn backups_restore(
                 .await
                 .map_err(|e| format!("Failed to get backup: {}", e))?;
 
-            if job.format_owner_simplex() != format!("g/{}", guild_id) {
+            if job.guild_id != guild_id {
                 return Err("Backup job is not owned by this server".into());
             }
 
@@ -1166,7 +1166,7 @@ pub async fn backups_restore(
 
     base_message
         .edit(
-            ctx.clone(),
+            ctx,
             poise::CreateReply::default().embed(
                 CreateEmbed::default()
                     .title("Restoring Backup...")
@@ -1190,7 +1190,7 @@ pub async fn backups_restore(
                 let new_job_msg = embed_job(&config::CONFIG.sites.api, &job, vec![], true)?;
 
                 base_message
-                    .edit(ctx.clone(), {
+                    .edit(ctx, {
                         let mut msg = poise::CreateReply::new();
                         for embed in new_job_msg.embeds {
                             msg = msg.embed(embed);

@@ -5,8 +5,8 @@ use ar_settings::types::{
 use splashcore_rs::value::Value;
 use std::sync::LazyLock;
 
-async fn check_perms<'a>(
-    ctx: &HookContext<'a>,
+async fn check_perms(
+    ctx: &HookContext<'_>,
     perm: &kittycat::perms::Permission,
 ) -> Result<(), SettingsError> {
     let res = modules::permission_checks::member_has_kittycat_perm(
@@ -101,7 +101,7 @@ impl SettingView for LockdownSettingsExecutor {
         for row in rows {
             let map = indexmap::indexmap! {
                 "guild_id".to_string() => Value::String(context.guild_id.to_string()),
-                "member_roles".to_string() => Value::List(row.member_roles.into_iter().map(|s| Value::String(s)).collect()),
+                "member_roles".to_string() => Value::List(row.member_roles.into_iter().map(Value::String).collect()),
                 "require_correct_layout".to_string() => Value::Boolean(row.require_correct_layout),
                 "created_at".to_string() => Value::TimestampTz(row.created_at),
                 "created_by".to_string() => Value::String(row.created_by),
