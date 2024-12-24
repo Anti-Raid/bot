@@ -17,7 +17,6 @@ log = "0.4"
 
 # Anti-Raid specific
 silverpelt = { path = "../../../../core/rust/rust.silverpelt" }
-permissions = { path = "../../../../core/rust/rust.permissions" }
 modules = { path = "../rust.modules" }
 config = { path = "../../../../core/rust/rust.config" }
 sandwich_driver = { path = "../../../../core/rust/rust.sandwich_driver" }

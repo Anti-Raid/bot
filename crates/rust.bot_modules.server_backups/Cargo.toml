@@ -24,3 +24,7 @@ jobserver = { path = "../../../../core/rust/rust.jobserver" }
 git = "https://github.com/Anti-Raid/serenity"
 branch = "next"
 features = ["model", "http", "cache", "rustls_backend", "unstable"]
+
+[dependencies.kittycat]
+git = "https://github.com/infinitybotlist/kittycat"
+branch = "main"

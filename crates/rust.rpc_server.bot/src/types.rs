@@ -1,5 +1,3 @@
-use modules::types::{GuildCommandConfiguration, GuildModuleConfiguration};
-use permissions::types::PermissionResult;
 use serde::{Deserialize, Serialize};
 use serenity::all::{GuildChannel, Permissions, Role, RoleId};
 
@@ -27,63 +25,14 @@ pub struct BaseGuildUserInfo {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CheckCommandPermission {
-    pub perm_res: PermissionResult,
-    pub is_ok: bool,
+    pub result: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 /// Given a guild id, a user id and a command name, check if the user has permission to run the command
 pub struct CheckCommandPermissionRequest {
     pub command: String,
-    pub opts: RpcCheckCommandOptions,
 }
-
-/// Extra options for checking a command
-///
-/// This is seperate from the actual internal stuff to both avoid exposing
-/// internals and to optimize data flow
-#[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq)]
-pub struct RpcCheckCommandOptions {
-    /// Flags of type RpcCheckCommandOptionsFlags
-    #[serde(default)]
-    pub flags: u8,
-
-    /// What custom resolved permissions to use for the user.
-    ///
-    /// API needs this for limiting the permissions of a user, allows setting custom resolved perms
-    #[serde(default)]
-    pub custom_resolved_kittycat_perms: Option<Vec<String>>,
-
-    /// Custom permission checks to use
-    #[serde(default)]
-    pub custom_command_configuration: Option<Box<GuildCommandConfiguration>>,
-
-    /// Custom permission checks to use
-    #[serde(default)]
-    pub custom_module_configuration: Option<Box<GuildModuleConfiguration>>,
-
-    /// The current channel id
-    #[serde(default)]
-    pub channel_id: Option<serenity::all::ChannelId>,
-}
-
-bitflags::bitflags! {
-    pub struct RpcCheckCommandOptionsFlags: u8 {
-        /// Whether or not to ignore the fact that the module is disabled in the guild
-        const IGNORE_MODULE_DISABLED = 1 << 2;
-        /// Whether or not to ignore the fact that the command is disabled in the guild
-        const IGNORE_COMMAND_DISABLED = 1 << 3;
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ClearModulesEnabledCacheRequest {
-    pub guild_id: Option<serenity::all::GuildId>,
-    pub module: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ClearModulesEnabledCacheResponse {}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum CanonicalSettingsResult {
@@ -112,11 +61,9 @@ pub struct ExecuteTemplateRequest {
 pub enum ExecuteTemplateResponse {
     Ok { result: Option<serde_json::Value> },
     ExecErr { error: String },
-    PermissionError { res: PermissionResult },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CheckUserHasKittycatPermissionsRequest {
     pub perm: String,
-    pub opts: RpcCheckCommandOptions,
 }

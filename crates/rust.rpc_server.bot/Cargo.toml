@@ -18,7 +18,6 @@ ar_settings = { path = "../../../../core/rust/rust.settings" }
 sandwich_driver = { path = "../../../../core/rust/rust.sandwich_driver" }
 silverpelt = { path = "../../../../core/rust/rust.silverpelt" }
 modules = { path = "../rust.modules" }
-permissions = { path = "../../../../core/rust/rust.permissions" }
 rust_rpc_server = { path = "../../../../core/rust/rust.rpc_server" }
 
 [dependencies.serenity]

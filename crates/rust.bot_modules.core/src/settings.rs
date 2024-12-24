@@ -9,11 +9,11 @@ use kittycat::perms::Permission;
 use splashcore_rs::value::Value;
 use std::sync::LazyLock;
 
-async fn check_perms<'a>(
-    ctx: &HookContext<'a>,
+async fn check_perms(
+    ctx: &HookContext<'_>,
     perm: &kittycat::perms::Permission,
 ) -> Result<(), SettingsError> {
-    let res = modules::permission_checks::member_has_kittycat_perm(
+    modules::permission_checks::member_has_kittycat_perm(
         ctx.guild_id,
         ctx.author,
         &ctx.data.data.pool,
@@ -21,15 +21,13 @@ async fn check_perms<'a>(
         &ctx.data.data.reqwest,
         &None,
         perm,
-        modules::permission_checks::CheckCommandOptions::default(),
     )
-    .await;
-
-    if res.is_ok() {
-        return Ok(());
-    }
-
-    Err(SettingsError::PermissionError { result: res })
+    .await
+    .map_err(|e| SettingsError::Generic {
+        message: format!("Failed to check permissions: {:?}", e),
+        src: "check_perms".to_string(),
+        typ: "internal".to_string(),
+    })
 }
 
 pub static GUILD_ROLES: LazyLock<Setting> = LazyLock::new(|| {
@@ -132,7 +130,7 @@ impl SettingView for GuildRolesExecutor {
                 "role_id".to_string() => Value::String(row.role_id),
                 "perms".to_string() => Value::List(row.perms.iter().map(|x| Value::String(x.to_string())).collect()),
                 "index".to_string() => Value::Integer(row.index.into()),
-                "display_name".to_string() => row.display_name.map(|x| Value::String(x)).unwrap_or(Value::None),
+                "display_name".to_string() => row.display_name.map(Value::String).unwrap_or(Value::None),
                 "created_at".to_string() => Value::TimestampTz(row.created_at),
                 "created_by".to_string() => Value::String(row.created_by),
                 "last_updated_at".to_string() => Value::TimestampTz(row.last_updated_at),
@@ -278,7 +276,7 @@ impl SettingDeleter for GuildRolesExecutor {
             "role_id".to_string() => Value::String(row.role_id),
             "perms".to_string() => Value::List(row.perms.iter().map(|x| Value::String(x.to_string())).collect()),
             "index".to_string() => Value::Integer(row.index.into()),
-            "display_name".to_string() => row.display_name.map(|x| Value::String(x)).unwrap_or(Value::None),
+            "display_name".to_string() => row.display_name.map(Value::String).unwrap_or(Value::None),
         };
 
         let res = self
@@ -323,9 +321,9 @@ pub struct GreBaseVerifyChecksResult {
 }
 
 impl GuildRolesExecutor {
-    async fn base_verify_checks<'a>(
+    async fn base_verify_checks(
         &self,
-        ctx: &HookContext<'a>,
+        ctx: &HookContext<'_>,
         state: &indexmap::IndexMap<String, Value>,
         op: OperationType,
     ) -> Result<GreBaseVerifyChecksResult, SettingsError> {
@@ -370,7 +368,7 @@ impl GuildRolesExecutor {
                 .max
                 .unwrap_or(0);
 
-                let index: i32 = (highest_index_rec + 1).into();
+                let index: i32 = highest_index_rec + 1;
 
                 index
             }
@@ -583,7 +581,7 @@ impl GuildRolesExecutor {
             typ: "internal".to_string(),
         })?;
 
-        if new_index < lowest_index.into() {
+        if new_index < lowest_index {
             return Err(SettingsError::Generic {
                 message: format!("You do not have permission to edit this role's permissions as the new index would be lower than you: {} < {}", new_index, lowest_index),
                 src: "NativeAction->index".to_string(),
@@ -745,7 +743,7 @@ pub struct GmeBaseVerifyChecksResult {
 pub struct GuildMembersExecutor;
 
 impl GuildMembersExecutor {
-    async fn get_kittycat_perms_for_user<'a>(
+    async fn get_kittycat_perms_for_user(
         &self,
         data: &SettingsData,
         conn: &mut sqlx::PgConnection,
@@ -793,9 +791,9 @@ impl GuildMembersExecutor {
         Ok((roles, kittycat_perms))
     }
 
-    async fn verify<'a>(
+    async fn verify(
         &self,
-        ctx: &HookContext<'a>,
+        ctx: &HookContext<'_>,
         state: &indexmap::IndexMap<String, Value>,
         op: OperationType,
     ) -> Result<GmeBaseVerifyChecksResult, SettingsError> {
@@ -859,7 +857,7 @@ impl GuildMembersExecutor {
 
             for perm in perm_overrides_value {
                 if let Value::String(perm) = perm {
-                    perm_overrides.push(kittycat::perms::Permission::from_string(&perm));
+                    perm_overrides.push(kittycat::perms::Permission::from_string(perm));
                 } else {
                     return Err(SettingsError::Generic {
                         message: "Failed to parse permissions".to_string(),
@@ -898,7 +896,7 @@ impl GuildMembersExecutor {
         let author_kittycat_perms =
             match self
                 .get_kittycat_perms_for_user(
-                    &ctx.data,
+                    ctx.data,
                     &mut *ctx.data.data.pool.acquire().await.map_err(|e| {
                         SettingsError::Generic {
                             message: format!("Failed to get pool: {:?}", e),
@@ -926,7 +924,7 @@ impl GuildMembersExecutor {
         let (target_member_roles, current_user_kittycat_perms) =
             match self
                 .get_kittycat_perms_for_user(
-                    &ctx.data,
+                    ctx.data,
                     &mut *ctx.data.data.pool.acquire().await.map_err(|e| {
                         SettingsError::Generic {
                             message: format!("Failed to get pool: {:?}", e),
@@ -1256,7 +1254,7 @@ pub static GUILD_TEMPLATES: LazyLock<Setting> = LazyLock::new(|| {
                 description: "The events that this template can be dispatched on. If empty, this template is never dispatched.".to_string(),
                 column_type: ColumnType::new_array(InnerColumnType::String { min_length: None, max_length: None, allowed_values: vec![], kind: InnerColumnTypeStringKind::Normal {} }),
                 nullable: true,
-                suggestions: ColumnSuggestion::Static { suggestions: gwevent::core::event_list().to_vec().into_iter().map(|x| x.to_string()).collect() },
+                suggestions: ColumnSuggestion::Static { suggestions: gwevent::core::event_list().iter().copied().map(|x| x.to_string()).collect() },
                 ignored_for: vec![],
                 secret: false,
             },
@@ -1292,7 +1290,7 @@ pub static GUILD_TEMPLATES: LazyLock<Setting> = LazyLock::new(|| {
 pub struct GuildTemplateExecutor;
 
 impl GuildTemplateExecutor {
-    async fn validate<'a>(&self, ctx: &HookContext<'a>, name: &str) -> Result<(), SettingsError> {
+    async fn validate(&self, ctx: &HookContext<'_>, name: &str) -> Result<(), SettingsError> {
         if name.starts_with("$shop/") {
             let (shop_tname, shop_tversion) = silverpelt::templates::parse_shop_template(name)
                 .map_err(|e| SettingsError::Generic {
@@ -1326,11 +1324,7 @@ impl GuildTemplateExecutor {
         Ok(())
     }
 
-    async fn post_action<'a>(
-        &self,
-        ctx: &HookContext<'a>,
-        name: &str,
-    ) -> Result<(), SettingsError> {
+    async fn post_action(&self, ctx: &HookContext<'_>, name: &str) -> Result<(), SettingsError> {
         // Dispatch a OnStartup event for the template
         silverpelt::ar_event::AntiraidEvent::OnStartup(vec![name.to_string()])
             .dispatch_to_template_worker(&ctx.data.data, ctx.guild_id)
@@ -1435,7 +1429,7 @@ impl SettingCreator for GuildTemplateExecutor {
             });
         }
 
-        self.validate(&ctx, &name).await?;
+        self.validate(&ctx, name).await?;
 
         let Some(Value::String(content)) = entry.get("content") else {
             return Err(SettingsError::MissingOrInvalidField {
@@ -1509,7 +1503,7 @@ impl SettingUpdater for GuildTemplateExecutor {
             });
         };
 
-        self.validate(&ctx, &name).await?;
+        self.validate(&ctx, name).await?;
 
         let Some(Value::String(content)) = entry.get("content") else {
             return Err(SettingsError::MissingOrInvalidField {
@@ -2054,7 +2048,7 @@ impl SettingCreator for GuildTemplateShopExecutor {
             });
         }
 
-        if name.chars().next() == Some('@') {
+        if name.starts_with('@') {
             // This is a namespaced template, check that the server owns the namespace
             if !name.contains('/') {
                 return Err(SettingsError::Generic {

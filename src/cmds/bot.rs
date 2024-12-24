@@ -145,8 +145,8 @@ impl silverpelt::data::Props for Props {
     }
 }
 
-async fn event_listener<'a>(
-    ctx: poise::FrameworkContext<'a, Data, Error>,
+async fn event_listener(
+    ctx: poise::FrameworkContext<'_, Data, Error>,
     event: &FullEvent,
 ) -> Result<(), Error> {
     match event {

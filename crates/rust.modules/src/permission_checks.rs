@@ -1,15 +1,4 @@
 use crate::cache::ModuleCache;
-use crate::{
-    module_config::{
-        get_best_command_configuration, get_command_extended_data, get_module_configuration,
-    },
-    types::{GuildCommandConfiguration, GuildModuleConfiguration},
-    utils::permute_command_names,
-};
-use kittycat::perms::Permission;
-use log::info;
-use permissions::types::{PermissionCheck, PermissionResult};
-use serde::{Deserialize, Serialize};
 use serenity::all::{GuildId, UserId};
 use serenity::small_fixed_array::FixedArray;
 use sqlx::PgPool;
@@ -28,7 +17,7 @@ pub async fn get_user_discord_info(
         serenity::all::Permissions,        // member_perms
         FixedArray<serenity::all::RoleId>, // roles
     ),
-    PermissionResult,
+    crate::Error,
 > {
     #[cfg(test)]
     {
@@ -90,14 +79,7 @@ pub async fn get_user_discord_info(
         }
     }
 
-    let guild = match guild_id.to_partial_guild(&serenity_context).await {
-        Ok(guild) => guild,
-        Err(e) => {
-            return Err(PermissionResult::DiscordError {
-                error: e.to_string(),
-            });
-        }
-    };
+    let guild = guild_id.to_partial_guild(&serenity_context).await?;
 
     // OPTIMIZATION: if owner, we dont need to continue further
     if user_id == guild.owner_id {
@@ -129,27 +111,17 @@ pub async fn get_user_discord_info(
     }
 
     let member = {
-        let member = match sandwich_driver::member_in_guild(
+        let member = sandwich_driver::member_in_guild(
             &serenity_context.cache,
             &serenity_context.http,
             reqwest,
             guild_id,
             user_id,
         )
-        .await
-        {
-            Ok(member) => member,
-            Err(e) => {
-                return Err(PermissionResult::DiscordError {
-                    error: e.to_string(),
-                });
-            }
-        };
+        .await?;
 
         let Some(member) = member else {
-            return Err(PermissionResult::DiscordError {
-                error: "Member could not fetched".to_string(),
-            });
+            return Err("Member could not fetched".into());
         };
 
         member
@@ -170,83 +142,20 @@ pub async fn get_user_discord_info(
 }
 
 pub async fn get_user_kittycat_perms(
-    opts: &CheckCommandOptions,
     pool: &PgPool,
     guild_id: GuildId,
     guild_owner_id: UserId,
     user_id: UserId,
     roles: &FixedArray<serenity::all::RoleId>,
 ) -> Result<Vec<kittycat::perms::Permission>, silverpelt::Error> {
-    if let Some(ref custom_resolved_kittycat_perms) = opts.custom_resolved_kittycat_perms {
-        let kc_perms = silverpelt::member_permission_calc::get_kittycat_perms(
-            &mut *pool.acquire().await?,
-            guild_id,
-            guild_owner_id,
-            user_id,
-            roles,
-        )
-        .await?;
-
-        let mut resolved_perms = Vec::new();
-        for perm in custom_resolved_kittycat_perms {
-            if kittycat::perms::has_perm(&kc_perms, perm) {
-                resolved_perms.push(perm.clone());
-            }
-        }
-
-        Ok(resolved_perms)
-    } else {
-        Ok(silverpelt::member_permission_calc::get_kittycat_perms(
-            &mut *pool.acquire().await?,
-            guild_id,
-            guild_owner_id,
-            user_id,
-            roles,
-        )
-        .await?)
-    }
-}
-
-/// Extra options for checking a command
-#[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq)]
-pub struct CheckCommandOptions {
-    /// Whether or not to ignore the fact that the module is disabled in the guild
-    #[serde(default)]
-    pub ignore_module_disabled: bool,
-
-    /// Whether or not to ignore the fact that the command is disabled in the guild
-    #[serde(default)]
-    pub ignore_command_disabled: bool,
-
-    /// What custom resolved permissions to use for the user. API needs this for limiting the permissions of a user
-    #[serde(default)]
-    pub custom_resolved_kittycat_perms: Option<Vec<Permission>>,
-
-    /// Custom command configuration to use
-    #[serde(default)]
-    pub custom_command_configuration: Option<GuildCommandConfiguration>,
-
-    /// Custom module configuration to use
-    #[serde(default)]
-    pub custom_module_configuration: Option<GuildModuleConfiguration>,
-
-    /// The current channel id
-    #[serde(default)]
-    pub channel_id: Option<serenity::all::ChannelId>,
-}
-
-#[allow(clippy::derivable_impls)]
-impl Default for CheckCommandOptions {
-    fn default() -> Self {
-        Self {
-            ignore_module_disabled: false,
-            ignore_command_disabled: false,
-            custom_resolved_kittycat_perms: None,
-            custom_command_configuration: None,
-            custom_module_configuration: None,
-            channel_id: None,
-        }
-    }
+    silverpelt::member_permission_calc::get_kittycat_perms(
+        &mut *pool.acquire().await?,
+        guild_id,
+        guild_owner_id,
+        user_id,
+        roles,
+    )
+    .await
 }
 
 /// Check command checks whether or not a user has permission to run a command
@@ -261,174 +170,25 @@ pub async fn check_command(
     reqwest: &reqwest::Client,
     // If a poise::Context is available and originates from a Application Command, we can fetch the guild+member from cache itself
     poise_ctx: &Option<crate::Context<'_>>,
-    // Needed for settings and the website (potentially)
-    opts: CheckCommandOptions,
-) -> PermissionResult {
-    let command_permutations = permute_command_names(command);
-
-    let module_ref = match silverpelt_cache
-        .command_id_module_map
-        .try_get(&command_permutations[0])
-    {
-        dashmap::try_result::TryResult::Present(v) => v,
-        dashmap::try_result::TryResult::Absent => {
-            return PermissionResult::ModuleNotFound {};
-        }
-        dashmap::try_result::TryResult::Locked => {
-            return PermissionResult::GenericError {
-                error: "This module is being updated! Please try again later.".to_string(),
-            };
-        }
+) -> Result<(), crate::Error> {
+    let base_command = command.split(' ').next().unwrap_or_default();
+    let Some(check_ptr) = silverpelt_cache
+        .command_id_permission_check_map
+        .get(base_command)
+    else {
+        return Err(format!("Command `{}` not found", base_command).into());
     };
-
-    let module = match silverpelt_cache.module_cache.get(module_ref.value()) {
-        Some(v) => v,
-        None => {
-            return PermissionResult::UnknownModule {
-                module: module_ref.to_string(),
-            };
-        }
-    };
-
-    info!(
-        "Checking if user {} can run command {} on module {}",
-        user_id,
-        command,
-        module.id()
-    );
-
-    let module_config = {
-        if let Some(ref custom_module_configuration) = opts.custom_module_configuration {
-            custom_module_configuration.clone()
-        } else {
-            let gmc =
-                match get_module_configuration(pool, &guild_id.to_string(), module_ref.value())
-                    .await
-                {
-                    Ok(v) => v,
-                    Err(e) => {
-                        return e.into();
-                    }
-                };
-
-            gmc.unwrap_or(GuildModuleConfiguration {
-                id: "".to_string(),
-                guild_id: guild_id.to_string(),
-                module: module_ref.clone(),
-                disabled: None,
-            })
-        }
-    };
-
-    let cmd_data = match get_command_extended_data(silverpelt_cache, &command_permutations) {
-        Ok(v) => v,
-        Err(e) => {
-            return e.into();
-        }
-    };
-
-    let command_config = {
-        if let Some(ref custom_command_configuration) = opts.custom_command_configuration {
-            custom_command_configuration.clone()
-        } else {
-            let gcc = match get_best_command_configuration(
-                pool,
-                &guild_id.to_string(),
-                &command_permutations,
-            )
-            .await
-            {
-                Ok(v) => v,
-                Err(e) => {
-                    return e.into();
-                }
-            };
-
-            gcc.unwrap_or(GuildCommandConfiguration {
-                id: "".to_string(),
-                guild_id: guild_id.to_string(),
-                command: command.to_string(),
-                perms: None,
-                disabled: None,
-            })
-        }
-    };
-
-    // Check if command is disabled if and only if ignore_command_disabled is false
-    #[allow(clippy::collapsible_if)]
-    if !opts.ignore_command_disabled {
-        if command_config
-            .disabled
-            .unwrap_or(!cmd_data.is_default_enabled)
-        {
-            return PermissionResult::CommandDisabled {
-                command: command.to_string(),
-            };
-        }
-    }
-
-    // Check if module is disabled if and only if ignore_module_disabled is false
-    #[allow(clippy::collapsible_if)]
-    if !opts.ignore_module_disabled {
-        let module_default_enabled = {
-            let Some(module) = silverpelt_cache.module_cache.get(module_ref.value()) else {
-                return PermissionResult::UnknownModule {
-                    module: module_ref.to_string(),
-                };
-            };
-
-            module.is_default_enabled()
-        };
-
-        if module_config.disabled.unwrap_or(!module_default_enabled) {
-            return PermissionResult::ModuleDisabled {
-                module: module_ref.to_string(),
-            };
-        }
-    }
 
     // Try getting guild+member from cache to speed up response times first
-    let (is_owner, guild_owner_id, member_perms, roles) = match get_user_discord_info(
-        guild_id,
-        user_id,
-        serenity_context,
-        reqwest,
-        poise_ctx,
-    )
-    .await
-    {
-        Ok(v) => v,
-        Err(e) => {
-            return e;
-        }
-    };
+    let (is_owner, guild_owner_id, member_perms, roles) =
+        get_user_discord_info(guild_id, user_id, serenity_context, reqwest, poise_ctx).await?;
 
     if is_owner {
-        return PermissionResult::OkWithMessage {
-            message: "owner".to_string(),
-        };
+        return Ok(()); // owner
     }
 
     let kittycat_perms =
-        match get_user_kittycat_perms(&opts, pool, guild_id, guild_owner_id, user_id, &roles).await
-        {
-            Ok(v) => v,
-            Err(e) => {
-                return e.into();
-            }
-        };
-
-    // Check for permission checks in this order:
-    // - command_config.perms
-    // - module_config.default_perms
-    // - cmd_data.default_perms
-    let check = {
-        if let Some(perms) = &command_config.perms {
-            perms
-        } else {
-            &cmd_data.default_perms
-        }
-    };
+        get_user_kittycat_perms(pool, guild_id, guild_owner_id, user_id, &roles).await?;
 
     match silverpelt::ar_event::AntiraidEvent::Custom(silverpelt::ar_event::CustomEvent {
         event_name: "AR/CheckCommand".to_string(),
@@ -438,11 +198,6 @@ pub async fn check_command(
             "user_id": user_id,
             "member_native_perms": member_perms,
             "member_kittycat_perms": kittycat_perms,
-            "opts": opts,
-            "check": check,
-            "module_config": module_config,
-            "command_config": command_config,
-            "command_extended_data": cmd_data,
             "is_owner": is_owner,
             "guild_owner_id": guild_owner_id,
             "roles": roles,
@@ -454,18 +209,14 @@ pub async fn check_command(
         Ok(_) => {}
         Err(e) => {
             if e.to_string() == "AR/CheckCommand/Skip" {
-                return PermissionResult::OkWithMessage {
-                    message: "message=>SKIP".to_string(),
-                };
+                return Ok(()); // SKIP
             }
 
-            return PermissionResult::GenericError {
-                error: e.to_string(),
-            };
+            return Err(e);
         }
     };
 
-    permissions::check_perms(check, member_perms, &kittycat_perms)
+    (check_ptr)(command, user_id, member_perms, kittycat_perms)
 }
 
 /// Returns whether a member has a kittycat permission
@@ -480,38 +231,17 @@ pub async fn member_has_kittycat_perm(
     // If a poise::Context is available and originates from a Application Command, we can fetch the guild+member from cache itself
     poise_ctx: &Option<crate::Context<'_>>,
     perm: &kittycat::perms::Permission,
-    opts: CheckCommandOptions,
-) -> PermissionResult {
+) -> Result<(), crate::Error> {
     // Try getting guild+member from cache to speed up response times first
-    let (is_owner, guild_owner_id, member_perms, roles) = match get_user_discord_info(
-        guild_id,
-        user_id,
-        serenity_context,
-        reqwest,
-        poise_ctx,
-    )
-    .await
-    {
-        Ok(v) => v,
-        Err(e) => {
-            return e;
-        }
-    };
+    let (is_owner, guild_owner_id, member_perms, roles) =
+        get_user_discord_info(guild_id, user_id, serenity_context, reqwest, poise_ctx).await?;
 
     if is_owner {
-        return PermissionResult::OkWithMessage {
-            message: "owner".to_string(),
-        };
+        return Ok(()); // owner
     }
 
     let kittycat_perms =
-        match get_user_kittycat_perms(&opts, pool, guild_id, guild_owner_id, user_id, &roles).await
-        {
-            Ok(v) => v,
-            Err(e) => {
-                return e.into();
-            }
-        };
+        get_user_kittycat_perms(pool, guild_id, guild_owner_id, user_id, &roles).await?;
 
     match silverpelt::ar_event::AntiraidEvent::Custom(silverpelt::ar_event::CustomEvent {
         event_name: "AR/CheckKittycatPermissions".to_string(),
@@ -524,7 +254,6 @@ pub async fn member_has_kittycat_perm(
             "is_owner": is_owner,
             "guild_owner_id": guild_owner_id,
             "roles": roles,
-            "opts": opts,
         }),
     })
     .dispatch_to_template_worker(&serenity_context.data::<silverpelt::data::Data>(), guild_id)
@@ -533,26 +262,16 @@ pub async fn member_has_kittycat_perm(
         Ok(_) => {}
         Err(e) => {
             if e.to_string() == "AR/CheckKittycatPermissions/Skip" {
-                return PermissionResult::OkWithMessage {
-                    message: "message=>SKIP".to_string(),
-                };
-            } else {
-                return PermissionResult::GenericError {
-                    error: e.to_string(),
-                };
+                return Ok(()); // SKIP
             }
+
+            return Err(e);
         }
     }
 
     if !kittycat::perms::has_perm(&kittycat_perms, perm) {
-        return PermissionResult::MissingKittycatPerms {
-            check: PermissionCheck {
-                kittycat_perms: vec![perm.to_string()],
-                native_perms: vec![],
-                inner_and: false,
-            },
-        };
+        return Err(format!("User does not have permission: {}", perm).into());
     }
 
-    PermissionResult::Ok {}
+    Ok(())
 }

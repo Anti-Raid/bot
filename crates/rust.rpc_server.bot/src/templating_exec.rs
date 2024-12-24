@@ -15,22 +15,20 @@ pub(crate) async fn execute_template(
     Path((guild_id, user_id)): Path<(serenity::all::GuildId, serenity::all::UserId)>,
     Json(req): Json<crate::types::ExecuteTemplateRequest>,
 ) -> Json<ExecuteTemplateResponse> {
-    let modules_cache = modules::module_cache(&data);
-    let perm_res = modules::permission_checks::check_command(
-        &modules_cache,
-        "exec_template",
+    if let Err(perm_res) = modules::permission_checks::member_has_kittycat_perm(
         guild_id,
         user_id,
         &data.pool,
         &serenity_context,
         &data.reqwest,
         &None,
-        modules::permission_checks::CheckCommandOptions::default(),
+        &kittycat::perms::Permission::from_string("templating.eval"),
     )
-    .await;
-
-    if !perm_res.is_ok() {
-        return Json(ExecuteTemplateResponse::PermissionError { res: perm_res });
+    .await
+    {
+        return Json(ExecuteTemplateResponse::ExecErr {
+            error: perm_res.to_string(),
+        });
     }
 
     let resp = silverpelt::ar_event::AntiraidEvent::Custom(silverpelt::ar_event::CustomEvent {

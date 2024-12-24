@@ -43,7 +43,6 @@ type BackupRestoreOpts struct {
     slash_command,
     guild_only,
     user_cooldown = "5",
-    aliases("backup"),
     subcommands("backups_create", "backups_list", "backups_delete", "backups_restore")
 )]
 pub async fn backups(_ctx: Context<'_>) -> Result<(), Error> {
@@ -369,7 +368,7 @@ pub async fn backups_list(ctx: Context<'_>) -> Result<(), Error> {
             }
             "backups_restore" => {
                 // Check permission
-                let perm_res = modules::permission_checks::check_command(
+                if let Err(perm_res) = modules::permission_checks::check_command(
                     &modules::module_cache(&data),
                     "backups restore",
                     guild_id,
@@ -378,17 +377,15 @@ pub async fn backups_list(ctx: Context<'_>) -> Result<(), Error> {
                     ctx.serenity_context(),
                     &data.reqwest,
                     &Some(ctx),
-                    modules::permission_checks::CheckCommandOptions::default(), // TODO: Maybe change this to allow backups restore to be disabled?
                 )
-                .await;
-
-                if !perm_res.is_ok() {
+                .await
+                {
                     item.create_response(
                         &ctx.serenity_context().http,
                         serenity::all::CreateInteractionResponse::Message(
                             serenity::all::CreateInteractionResponseMessage::default()
                                 .ephemeral(true)
-                                .content(perm_res.to_markdown()),
+                                .content(perm_res.to_string()),
                         ),
                     )
                     .await?;
@@ -637,7 +634,7 @@ pub async fn backups_list(ctx: Context<'_>) -> Result<(), Error> {
             }
             "backups_delete" => {
                 // Check permission
-                let perm_res = modules::permission_checks::check_command(
+                if let Err(perm_res) = modules::permission_checks::check_command(
                     &modules::module_cache(&data),
                     "backups delete",
                     guild_id,
@@ -646,17 +643,15 @@ pub async fn backups_list(ctx: Context<'_>) -> Result<(), Error> {
                     ctx.serenity_context(),
                     &data.reqwest,
                     &Some(ctx),
-                    modules::permission_checks::CheckCommandOptions::default(), // TODO: Maybe change this to allow backups delete to be disabled?
                 )
-                .await;
-
-                if !perm_res.is_ok() {
+                .await
+                {
                     item.create_response(
                         &ctx.serenity_context().http,
                         serenity::all::CreateInteractionResponse::Message(
                             serenity::all::CreateInteractionResponseMessage::default()
                                 .ephemeral(true)
-                                .content(perm_res.to_markdown()),
+                                .content(perm_res.to_string()),
                         ),
                     )
                     .await?;

@@ -203,7 +203,7 @@ pub async fn command_check(ctx: modules::Context<'_>) -> Result<bool, Error> {
 
     let command = ctx.command();
 
-    let res = modules::permission_checks::check_command(
+    if let Err(res) = modules::permission_checks::check_command(
         &modules::module_cache(&data),
         &command.qualified_name,
         guild_id,
@@ -212,29 +212,23 @@ pub async fn command_check(ctx: modules::Context<'_>) -> Result<bool, Error> {
         ctx.serenity_context(),
         &data.reqwest,
         &Some(ctx),
-        modules::permission_checks::CheckCommandOptions {
-            channel_id: Some(ctx.channel_id()),
-            ..Default::default()
-        },
     )
-    .await;
+    .await
+    {
+        ctx.send(
+            poise::CreateReply::new().embed(
+                serenity::all::CreateEmbed::new()
+                    .color(serenity::all::Color::RED)
+                    .title("You don't have permission to use this command?")
+                    .description(res.to_string()),
+            ),
+        )
+        .await?;
 
-    if res.is_ok() {
-        return Ok(true);
+        return Ok(false);
     }
 
-    ctx.send(
-        poise::CreateReply::new().embed(
-            serenity::all::CreateEmbed::new()
-                .color(serenity::all::Color::RED)
-                .title("You don't have permission to use this command?")
-                .description(res.to_markdown())
-                .field("Code", format!("`{}`", res.code()), false),
-        ),
-    )
-    .await?;
-
-    Ok(false)
+    Ok(true)
 }
 
 pub fn get_commands(
@@ -257,29 +251,12 @@ pub fn get_commands(
             continue;
         }
 
-        for (mut cmd, extended_data) in module.raw_commands() {
-            let root_is_virtual = match extended_data.get("") {
-                Some(root) => root.virtual_command,
-                None => false,
-            };
-
-            if root_is_virtual {
-                continue;
-            }
-
+        for (mut cmd, _) in module.raw_commands() {
             cmd.category = Some(module.id().into());
 
             let mut subcommands = Vec::new();
             // Ensure subcommands are also linked to a category
             for subcommand in cmd.subcommands {
-                let ext_data = extended_data.get(&*subcommand.name).unwrap_or_else(|| {
-                    panic!("Subcommand {} does not have extended data", subcommand.name)
-                });
-
-                if ext_data.virtual_command {
-                    continue;
-                }
-
                 subcommands.push(poise::Command {
                     category: Some(module.id().into()),
                     ..subcommand

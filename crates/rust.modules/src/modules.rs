@@ -1,4 +1,18 @@
-pub type CommandObj = (crate::Command, crate::CommandExtendedDataMap);
+pub type PermissionCheck = fn(
+    &str,
+    serenity::all::UserId,
+    serenity::all::Permissions,
+    Vec<kittycat::perms::Permission>,
+) -> Result<(), crate::Error>;
+
+pub fn permission_check_none(
+    _command: &str,
+    _user_id: serenity::all::UserId,
+    _native_perms: serenity::all::Permissions,
+    _kittycat_perms: Vec<kittycat::perms::Permission>,
+) -> Result<(), crate::Error> {
+    Ok(())
+}
 
 /// The `Module` trait can be used to create/define modules that run on Anti-Raid
 ///
@@ -41,7 +55,7 @@ pub trait Module: Send + Sync {
     }
 
     /// The commands in the module
-    fn raw_commands(&self) -> Vec<CommandObj> {
+    fn raw_commands(&self) -> Vec<(crate::Command, PermissionCheck)> {
         Vec::new()
     }
 
@@ -66,73 +80,6 @@ pub trait Module: Send + Sync {
 
 /// Validates a module to ensure it is set up correctly
 pub fn validate_module<T: Module + ?Sized>(module: &T) -> Result<(), crate::Error> {
-    let commands = module.raw_commands();
-
-    // If virtual module, all commands must also be virtual, if root command is virtual, all subcommands must be virtual
-    for command in commands.iter() {
-        let root_is_virtual = {
-            match command.1.get("") {
-                Some(root) => root.virtual_command,
-                None => false,
-            }
-        };
-        for (sub_name, extended_data) in command.1.iter() {
-            if module.virtual_module() && !extended_data.virtual_command {
-                return Err(format!(
-                    "Module {} is a virtual module, but has a non-virtual command {}",
-                    module.id(),
-                    command.0.name
-                )
-                .into());
-            }
-
-            if root_is_virtual && !extended_data.virtual_command {
-                return Err(format!(
-                    "Module {} has a virtual root command, but a non-virtual subcommand {} {}",
-                    module.id(),
-                    command.0.name,
-                    sub_name
-                )
-                .into());
-            }
-        }
-    }
-
-    // Check: Ensure all command extended data's have valid subcommands listed
-    for (command, extended_data) in commands.iter() {
-        let mut listed_subcommands = Vec::new();
-        let mut actual_subcommands = Vec::new();
-
-        for (subcommand, _) in extended_data.iter() {
-            listed_subcommands.push(subcommand.to_string());
-        }
-
-        for subcommand in &command.subcommands {
-            actual_subcommands.push(subcommand.name.clone());
-        }
-
-        // We don't care about omission of "" (rootcmd) here
-        if !listed_subcommands.contains(&"".to_string()) {
-            listed_subcommands.insert(0, "".to_string());
-        }
-
-        if !actual_subcommands.contains(&"".to_string().into()) {
-            actual_subcommands.insert(0, "".to_string().into());
-        }
-
-        if listed_subcommands != actual_subcommands {
-            return Err(
-                format!(
-                    "Module {} has a command {} with subcommands that do not match the actual subcommands [{} != {}]",
-                    module.id(),
-                    command.name,
-                    listed_subcommands.join(", "),
-                    actual_subcommands.join(", ")
-                ).into()
-            );
-        }
-    }
-
     // Check that all config_opts have unique ids
     let mut config_ids = Vec::new();
 

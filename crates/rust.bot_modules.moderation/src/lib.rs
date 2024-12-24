@@ -1,9 +1,5 @@
 mod cmd;
 
-use indexmap::indexmap;
-use modules::types::CommandExtendedData;
-use permissions::types::PermissionCheck;
-
 pub struct Module;
 
 impl modules::modules::Module for Module {
@@ -23,66 +19,59 @@ impl modules::modules::Module for Module {
         true
     }
 
-    fn raw_commands(&self) -> Vec<modules::modules::CommandObj> {
+    fn raw_commands(&self) -> Vec<(modules::Command, modules::modules::PermissionCheck)> {
         vec![(
             cmd::moderation(),
-            indexmap! {
-                "" => CommandExtendedData {
-                    default_perms: PermissionCheck {
-                        kittycat_perms: vec!["moderation.*".to_string()],
-                        native_perms: vec![],
-                        inner_and: false,
+            |command, _user_id, native_perms, kittycat_perms| {
+                if native_perms.administrator() {
+                    return Ok(());
+                }
+
+                match command {
+                    "moderation prune" => {
+                        if !native_perms.contains(serenity::model::permissions::Permissions::MANAGE_MESSAGES) && !kittycat::perms::has_perm(&kittycat_perms, &"moderation.prune".to_string().into()) {
+                            return Err("Missing required permission: MANAGE_MESSAGES or moderation.prune".into());
+                        }
+
+                        Ok(())
                     },
-                    ..Default::default()
-                },
-                "prune" => CommandExtendedData {
-                    default_perms: PermissionCheck {
-                        kittycat_perms: vec!["moderation.prune".to_string()],
-                        native_perms: vec![serenity::model::permissions::Permissions::MANAGE_MESSAGES, serenity::model::permissions::Permissions::MANAGE_GUILD],
-                        inner_and: false,
+                    "moderation kick" => {
+                        if !native_perms.contains(serenity::model::permissions::Permissions::KICK_MEMBERS) && !kittycat::perms::has_perm(&kittycat_perms, &"moderation.kick".to_string().into()) {
+                            return Err("Missing required permission: KICK_MEMBERS or moderation.kick".into());
+                        }
+
+                        Ok(())
                     },
-                    ..Default::default()
-                },
-                "kick" => CommandExtendedData {
-                    default_perms: PermissionCheck {
-                        kittycat_perms: vec!["moderation.kick".to_string()],
-                        native_perms: vec![serenity::model::permissions::Permissions::KICK_MEMBERS],
-                        inner_and: false,
+                    "moderation ban" => {
+                        if !native_perms.contains(serenity::model::permissions::Permissions::BAN_MEMBERS) && !kittycat::perms::has_perm(&kittycat_perms, &"moderation.ban".to_string().into()) {
+                            return Err("Missing required permission: BAN_MEMBERS or moderation.ban".into());
+                        }
+
+                        Ok(())
                     },
-                    ..Default::default()
-                },
-                "ban" => CommandExtendedData {
-                    default_perms: PermissionCheck {
-                        kittycat_perms: vec!["moderation.ban".to_string()],
-                        native_perms: vec![serenity::model::permissions::Permissions::BAN_MEMBERS],
-                        inner_and: false,
+                    "moderation tempban" => {
+                        if !native_perms.contains(serenity::model::permissions::Permissions::BAN_MEMBERS) && !kittycat::perms::has_perm(&kittycat_perms, &"moderation.tempban".to_string().into()) {
+                            return Err("Missing required permission: BAN_MEMBERS or moderation.tempban".into());
+                        }
+
+                        Ok(())
                     },
-                    ..Default::default()
-                },
-                "tempban" => CommandExtendedData {
-                    default_perms: PermissionCheck {
-                        kittycat_perms: vec!["moderation.tempban".to_string()],
-                        native_perms: vec![serenity::model::permissions::Permissions::BAN_MEMBERS],
-                        inner_and: false,
+                    "moderation unban" => {
+                        if !native_perms.contains(serenity::model::permissions::Permissions::BAN_MEMBERS) && !kittycat::perms::has_perm(&kittycat_perms, &"moderation.unban".to_string().into()) {
+                            return Err("Missing required permission: BAN_MEMBERS or moderation.unban".into());
+                        }
+
+                        Ok(())
                     },
-                    ..Default::default()
-                },
-                "unban" => CommandExtendedData {
-                    default_perms: PermissionCheck {
-                        kittycat_perms: vec!["moderation.unban".to_string()],
-                        native_perms: vec![serenity::model::permissions::Permissions::BAN_MEMBERS],
-                        inner_and: false,
+                    "moderation timeout" => {
+                        if !native_perms.contains(serenity::model::permissions::Permissions::MODERATE_MEMBERS) && !kittycat::perms::has_perm(&kittycat_perms, &"moderation.timeout".to_string().into()) {
+                            return Err("Missing required permission: MODERATE_MEMBERS or moderation.timeout".into());
+                        }
+
+                        Ok(())
                     },
-                    ..Default::default()
-                },
-                "timeout" => CommandExtendedData {
-                    default_perms: PermissionCheck {
-                        kittycat_perms: vec!["moderation.timeout".to_string()],
-                        native_perms: vec![serenity::model::permissions::Permissions::MODERATE_MEMBERS],
-                        inner_and: false,
-                    },
-                    ..Default::default()
-                },
+                    _ => Err("Internal Error: No permissions needed found for command. Please contact support".into()),
+                }
             },
         )]
     }

@@ -1,14 +1,10 @@
 pub mod cache;
 pub mod canonical;
 pub mod helpers;
-pub mod module_config;
 pub mod modules;
 pub mod permission_checks;
-pub mod types;
-pub mod utils;
 
 pub use crate::modules::Module;
-pub use crate::types::{CommandExtendedData, CommandExtendedDataMap};
 pub use helpers::*;
 
 use silverpelt::data::Data;

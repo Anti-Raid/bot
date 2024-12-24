@@ -9,7 +9,7 @@ async fn check_perms(
     ctx: &HookContext<'_>,
     perm: &kittycat::perms::Permission,
 ) -> Result<(), SettingsError> {
-    let res = modules::permission_checks::member_has_kittycat_perm(
+    modules::permission_checks::member_has_kittycat_perm(
         ctx.guild_id,
         ctx.author,
         &ctx.data.data.pool,
@@ -17,15 +17,15 @@ async fn check_perms(
         &ctx.data.data.reqwest,
         &None,
         perm,
-        modules::permission_checks::CheckCommandOptions::default(),
     )
-    .await;
-
-    if res.is_ok() {
-        return Ok(());
-    }
-
-    Err(SettingsError::PermissionError { result: res })
+    .await
+    .map_err(|e| {
+        SettingsError::Generic {
+            message: format!("Error while checking permissions: {}", e),
+            src: "lockdown_settings_perms".to_string(),
+            typ: "value_error".to_string(),
+        }
+    })
 }
 
 pub static LOCKDOWN_SETTINGS: LazyLock<Setting> = LazyLock::new(|| {
@@ -374,84 +374,69 @@ impl SettingCreator for LockdownExecutor {
         entry: indexmap::IndexMap<String, splashcore_rs::value::Value>,
     ) -> Result<indexmap::IndexMap<String, splashcore_rs::value::Value>, SettingsError> {
         check_perms(&context, &"lockdowns.create".into()).await?;
-
-        let modules_cache = modules::module_cache(&context.data.data);
-        if !modules::module_config::is_module_enabled(&modules_cache, &context.data.data.pool, context.guild_id, "lockdown")
-        .await
-        .map_err(|e| SettingsError::Generic {
-            message: format!("Error while checking if module is enabled: {}", e),
-            src: "lockdown_create".to_string(),
-            typ: "value_error".to_string(),
-        })? {
-        return Err(SettingsError::Generic {
-            message: "Lockdown module is not enabled".to_string(),
-            src: "lockdown_create".to_string(),
-            typ: "value_error".to_string(),
-        });
-    }
     
-    let Some(splashcore_rs::value::Value::String(typ)) = entry.get("type") else {
-        return Err(SettingsError::MissingOrInvalidField {
-            field: "type".to_string(),
-            src: "lockdown_create_entry".to_string(),
-        });
-    };
+        let Some(splashcore_rs::value::Value::String(typ)) = entry.get("type") else {
+            return Err(SettingsError::MissingOrInvalidField {
+                field: "type".to_string(),
+                src: "lockdown_create_entry".to_string(),
+            });
+        };
 
-    let Some(splashcore_rs::value::Value::String(reason)) = entry.get("reason") else {
-        return Err(SettingsError::MissingOrInvalidField {
-            field: "reason".to_string(),
-            src: "lockdown_create_entry".to_string(),
-        });
-    };
+        let Some(splashcore_rs::value::Value::String(reason)) = entry.get("reason") else {
+            return Err(SettingsError::MissingOrInvalidField {
+                field: "reason".to_string(),
+                src: "lockdown_create_entry".to_string(),
+            });
+        };
 
-    // Get the current lockdown set
-    let mut lockdowns = lockdowns::LockdownSet::guild(context.guild_id, &context.data.data.pool)
-        .await
-        .map_err(|e| SettingsError::Generic {
-            message: format!("Error while fetching lockdown set: {}", e),
-            src: "lockdown_create_entry".to_string(),
-            typ: "value_error".to_string(),
-        })?;
+        // Get the current lockdown set
+        let mut lockdowns = lockdowns::LockdownSet::guild(context.guild_id, &context.data.data.pool)
+            .await
+            .map_err(|e| SettingsError::Generic {
+                message: format!("Error while fetching lockdown set: {}", e),
+                src: "lockdown_create_entry".to_string(),
+                typ: "value_error".to_string(),
+            })?;
 
-    // Create the lockdown
-    let lockdown_type =
-        lockdowns::from_lockdown_mode_string(typ).map_err(|_| SettingsError::Generic {
-            message: format!(
-                "Invalid lockdown mode: {}.\n\nTIP: The following lockdown modes are supported: {}", 
-                typ, 
-                {
-                    let mut supported_lockdown_modes = String::new();
+        // Create the lockdown
+        let lockdown_type =
+            lockdowns::from_lockdown_mode_string(typ).map_err(|_| SettingsError::Generic {
+                message: format!(
+                    "Invalid lockdown mode: {}.\n\nTIP: The following lockdown modes are supported: {}", 
+                    typ, 
+                    {
+                        let mut supported_lockdown_modes = String::new();
 
-                    for mode in lockdowns::CREATE_LOCKDOWN_MODES.iter() {
-                        let creator = mode.value();
-                        supported_lockdown_modes.push_str(&format!("\n- {}", creator.syntax()));
+                        for mode in lockdowns::CREATE_LOCKDOWN_MODES.iter() {
+                            let creator = mode.value();
+                            supported_lockdown_modes.push_str(&format!("\n- {}", creator.syntax()));
+                        }
+
+                        supported_lockdown_modes
                     }
-
-                    supported_lockdown_modes
-                }
-            ),
-            src: "lockdown_create_entry".to_string(),
-            typ: "value_error".to_string(),
+                ),
+                src: "lockdown_create_entry".to_string(),
+                typ: "value_error".to_string(),
         })?;
 
-    let lockdown_data = lockdowns::LockdownData {
-        cache: &context.data.serenity_context.cache,
-        http: &context.data.serenity_context.http,
-        pool: context.data.data.pool.clone(),
-        reqwest: context.data.data.reqwest.clone(),
-        object_store: context.data.data.object_store.clone(),
-    };
+        let lockdown_data = lockdowns::LockdownData {
+            cache: &context.data.serenity_context.cache,
+            http: &context.data.serenity_context.http,
+            pool: context.data.data.pool.clone(),
+            reqwest: context.data.data.reqwest.clone(),
+            object_store: context.data.data.object_store.clone(),
+        };
 
-    lockdowns
-        .easy_apply(lockdown_type, &lockdown_data, reason)
-        .await
-        .map_err(|e| SettingsError::Generic {
-            message: format!("Error while applying lockdown: {}", e),
-            src: "lockdown_create_entry".to_string(),
-            typ: "value_error".to_string(),
-        })?;
+        lockdowns
+            .easy_apply(lockdown_type, &lockdown_data, reason)
+            .await
+            .map_err(|e| SettingsError::Generic {
+                message: format!("Error while applying lockdown: {}", e),
+                src: "lockdown_create_entry".to_string(),
+                typ: "value_error".to_string(),
+            })?;
 
-    let created_lockdown =
+        let created_lockdown =
         lockdowns
             .lockdowns
             .last()
@@ -473,22 +458,7 @@ impl SettingDeleter for LockdownExecutor {
         primary_key: splashcore_rs::value::Value,
     ) -> Result<(), SettingsError> {
         check_perms(&context, &"lockdowns.delete".into()).await?;
-        
-        let modules_cache = modules::module_cache(&context.data.data);
-        if !modules::module_config::is_module_enabled(&modules_cache, &context.data.data.pool, context.guild_id, "lockdown")
-        .await
-        .map_err(|e| SettingsError::Generic {
-            message: format!("Error while checking if module is enabled: {}", e),
-            src: "lockdown_create".to_string(),
-            typ: "value_error".to_string(),
-        })? {
-            return Err(SettingsError::Generic {
-                message: "Lockdown module is not enabled".to_string(),
-                src: "lockdown_create".to_string(),
-                typ: "value_error".to_string(),
-            });
-        }
-        
+                
         let primary_key = match primary_key {
             Value::Uuid(primary_key) => primary_key,
             Value::String(primary_key) => primary_key

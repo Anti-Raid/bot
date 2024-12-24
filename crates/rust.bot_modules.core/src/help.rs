@@ -1,6 +1,5 @@
 use futures_util::future::FutureExt;
 use modules::Context;
-use permissions::types::PermissionResult;
 use silverpelt::Error;
 
 pub async fn filter(
@@ -29,7 +28,7 @@ pub async fn filter(
 
         let data = ctx.data();
 
-        let res = modules::permission_checks::check_command(
+        match modules::permission_checks::check_command(
             &modules::module_cache(&data),
             &cmd.qualified_name,
             guild_id,
@@ -38,20 +37,15 @@ pub async fn filter(
             ctx.serenity_context(),
             &data.reqwest,
             &Some(*ctx),
-            modules::permission_checks::CheckCommandOptions::default(),
         )
-        .await;
-
-        return match res {
-            PermissionResult::Ok {} => Ok(true),
-            PermissionResult::OkWithMessage { .. } => Ok(true),
-            PermissionResult::DiscordError { error } => Err(error.into()),
-            PermissionResult::GenericError { error } => Err(error.into()),
-            _ => Ok(false),
-        };
+        .await
+        {
+            Ok(_) => Ok(true),
+            Err(_) => Ok(false),
+        }
+    } else {
+        Ok(true)
     }
-
-    Ok(true)
 }
 
 #[derive(Default)]

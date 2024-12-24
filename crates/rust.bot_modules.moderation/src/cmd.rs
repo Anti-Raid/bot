@@ -257,10 +257,7 @@ async fn prune(
 
     // If we're pruning messages, do that
     let prune_opts = create_message_prune_serde(
-        match user {
-            Some(ref user) => Some(user.id),
-            None => None,
-        },
+        user.as_ref().map(|u| u.id),
         guild_id,
         &prune_channels,
         prune_ignore_errors,

@@ -1,6 +1,7 @@
-use crate::{CommandExtendedDataMap, canonical::CanonicalModule, modules::Module};
-use moka::future::Cache;
-use serenity::all::GuildId;
+use crate::{
+    canonical::CanonicalModule,
+    modules::{Module, PermissionCheck},
+};
 use std::sync::Arc;
 
 /// The compiler requires some help here with module cache so we use a wrapper struct
@@ -22,12 +23,6 @@ impl std::ops::Deref for ModuleCacheEntry {
 
 /// The module cache is a structure that contains the core state for the bots modules
 pub struct ModuleCache {
-    /// Cache of whether a (GuildId, String) pair has said module enabled or disabled
-    pub module_enabled_cache: Cache<(GuildId, String), bool>,
-
-    /// Cache of the extended data given a command (the extended data map stores the default base permissions and other data per command)
-    pub command_extra_data_map: dashmap::DashMap<String, CommandExtendedDataMap>,
-
     /// A commonly needed operation is mapping a module id to its respective module
     ///
     /// module_cache is a cache of module id to module
@@ -37,6 +32,9 @@ pub struct ModuleCache {
 
     /// Command ID to module map
     pub command_id_module_map: dashmap::DashMap<String, String>,
+
+    /// Command ID to permission check map
+    pub command_id_permission_check_map: dashmap::DashMap<String, PermissionCheck>,
 
     /// Cache of the canonical forms of all modules
     pub canonical_module_cache: dashmap::DashMap<String, CanonicalModule>,
@@ -48,10 +46,9 @@ pub struct ModuleCache {
 impl Default for ModuleCache {
     fn default() -> Self {
         Self {
-            module_enabled_cache: Cache::builder().support_invalidation_closures().build(),
-            command_extra_data_map: dashmap::DashMap::new(),
             module_cache: dashmap::DashMap::new(),
             command_id_module_map: dashmap::DashMap::new(),
+            command_id_permission_check_map: dashmap::DashMap::new(),
             canonical_module_cache: dashmap::DashMap::new(),
             settings_cache: dashmap::DashMap::new(),
         }
@@ -70,18 +67,19 @@ impl ModuleCache {
 
         let module: Arc<dyn Module> = module.into();
 
-        // Add the commands to cache
-        for (command, extended_data) in module.raw_commands().iter() {
-            self.command_id_module_map
-                .insert(command.name.to_string(), module.id().to_string());
-            self.command_extra_data_map
-                .insert(command.name.to_string(), extended_data.clone());
-        }
-
         // Add the settings to cache
         for setting in module.config_options() {
             self.settings_cache
                 .insert(setting.id.clone(), setting.clone());
+        }
+
+        // Add commands to map
+        for (command, f) in module.raw_commands() {
+            self.command_id_module_map
+                .insert(command.name.to_string(), module.id().to_string());
+
+            self.command_id_permission_check_map
+                .insert(command.name.to_string(), f);
         }
 
         // Add to canonical cache
@@ -95,14 +93,14 @@ impl ModuleCache {
 
     pub fn remove_module(&mut self, module_id: &str) {
         if let Some((_, module)) = self.module_cache.remove(module_id) {
-            for (command, _) in module.raw_commands().iter() {
-                self.command_id_module_map.remove(&command.name.to_string());
-                self.command_extra_data_map
-                    .remove(&command.name.to_string());
-            }
-
             for setting in module.config_options() {
                 self.settings_cache.remove(&setting.id);
+            }
+
+            for (command, _) in module.raw_commands() {
+                self.command_id_module_map.remove(&command.name.to_string());
+                self.command_id_permission_check_map
+                    .remove(&command.name.to_string());
             }
 
             self.canonical_module_cache.remove(module_id);

@@ -1,13 +1,8 @@
-mod commands;
 mod help;
-mod modules;
 mod ping;
 mod settings;
 mod stats;
-mod web;
 mod whois;
-
-use indexmap::indexmap;
 
 pub struct Module;
 
@@ -37,50 +32,12 @@ impl ::modules::Module for Module {
         true
     }
 
-    fn raw_commands(&self) -> Vec<::modules::modules::CommandObj> {
+    fn raw_commands(&self) -> Vec<(modules::Command, modules::modules::PermissionCheck)> {
         vec![
-            (
-                help::help(),
-                ::modules::types::CommandExtendedData::none_map(),
-            ),
-            (
-                stats::stats(),
-                ::modules::types::CommandExtendedData::none_map(),
-            ),
-            (
-                ping::ping(),
-                ::modules::types::CommandExtendedData::none_map(),
-            ),
-            (
-                whois::whois(),
-                ::modules::types::CommandExtendedData::none_map(),
-            ),
-            (
-                modules::modules(),
-                indexmap! {
-                    "" => ::modules::types::CommandExtendedData::kittycat_or_admin("modules", "*"),
-                    "list" => ::modules::types::CommandExtendedData::kittycat_or_admin("modules", "list"),
-                    "enable" => ::modules::types::CommandExtendedData::kittycat_or_admin("modules", "enable"),
-                    "disable" => ::modules::types::CommandExtendedData::kittycat_or_admin("modules", "disable"),
-                },
-            ),
-            (
-                commands::commands(),
-                indexmap! {
-                    "check" => ::modules::types::CommandExtendedData::kittycat_or_admin("commands", "check"),
-                    "enable" => ::modules::types::CommandExtendedData::kittycat_or_admin("commands", "enable"),
-                    "disable" => ::modules::types::CommandExtendedData::kittycat_or_admin("commands", "disable"),
-                },
-            ),
-            (
-                web::web(),
-                indexmap! {
-                    "use" => ::modules::types::CommandExtendedData {
-                        virtual_command: true,
-                        ..::modules::types::CommandExtendedData::kittycat_or_admin("web", "use")
-                    },
-                },
-            ),
+            (help::help(), modules::modules::permission_check_none),
+            (stats::stats(), modules::modules::permission_check_none),
+            (ping::ping(), modules::modules::permission_check_none),
+            (whois::whois(), modules::modules::permission_check_none),
         ]
     }
 
