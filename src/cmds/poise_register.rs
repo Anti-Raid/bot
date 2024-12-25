@@ -5,10 +5,6 @@ use serenity::all::{FullEvent, HttpBuilder};
 use std::io::Write;
 use std::sync::Arc;
 
-pub fn modules() -> Vec<Box<dyn modules::modules::Module>> {
-    bot_modules_default::modules()
-}
-
 pub async fn register_poise_commands() {
     let debug_mode = std::env::var("DEBUG").unwrap_or_default() == "true";
     let debug_opts = std::env::var("DEBUG_OPTS").unwrap_or_default();
@@ -74,17 +70,10 @@ pub async fn register_poise_commands() {
 
     info!("Registering poise commands");
 
-    let modules_cache = {
-        let mut modules_cache = modules::cache::ModuleCache::default();
-
-        for module in modules() {
-            modules_cache.add_module(module);
-        }
-
-        Arc::new(modules_cache)
-    };
-
-    let commands = crate::binutils::get_commands(&modules_cache);
+    let commands = crate::bot::raw_commands()
+        .into_iter()
+        .map(|(c, _, _)| c)
+        .collect::<Vec<_>>();
 
     let http = Arc::new(
         HttpBuilder::new(&config::CONFIG.discord_auth.token)

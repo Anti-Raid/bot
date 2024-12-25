@@ -1,8 +1,5 @@
-use botox::cache::CacheHttpImpl;
-
 use std::sync::{Arc, LazyLock};
 use std::time::Duration;
-use tokio::sync::RwLock;
 
 use clap::Parser;
 use log::{error, info};
@@ -20,10 +17,6 @@ pub struct CmdArgs {
     pub shard_count: Option<u16>,
 }
 
-pub fn modules() -> Vec<Box<dyn modules::Module>> {
-    bot_modules_default::modules()
-}
-
 pub struct ConnectState {
     pub ready: dashmap::DashMap<serenity::all::ShardId, bool>,
 }
@@ -33,117 +26,6 @@ pub static CONNECT_STATE: LazyLock<ConnectState> = LazyLock::new(|| ConnectState
 });
 
 static START_RPC: Once = Once::new();
-
-/// Props
-pub struct Props {
-    pub cmd_args: Arc<CmdArgs>,
-    pub cache_http: Arc<RwLock<Option<CacheHttpImpl>>>,
-    pub shard_manager: Arc<RwLock<Option<Arc<serenity::all::ShardManager>>>>,
-    pub module_cache: Arc<modules::cache::ModuleCache>,
-}
-
-#[async_trait::async_trait]
-impl silverpelt::data::Props for Props {
-    /// Converts the props to std::any::Any
-    fn as_any(&self) -> &(dyn std::any::Any + Send + Sync) {
-        self
-    }
-
-    fn slot(&self) -> Option<Arc<dyn std::any::Any + Send + Sync>> {
-        Some(self.module_cache.clone())
-    }
-
-    fn extra_description(&self) -> String {
-        "...".to_string()
-    }
-
-    async fn shards(&self) -> Result<Vec<u16>, Error> {
-        if let Some(ref shards) = self.cmd_args.shards {
-            return Ok(shards.clone());
-        };
-
-        let guard = self.shard_manager.read().await;
-
-        if let Some(shard_manager) = guard.as_ref() {
-            let mut shards = Vec::new();
-
-            for (id, _) in shard_manager.runners.lock().await.iter() {
-                shards.push(id.0);
-            }
-
-            Ok(shards)
-        } else {
-            Ok(Vec::new())
-        }
-    }
-
-    async fn shard_count(&self) -> Result<u16, Error> {
-        let guard = self.cache_http.read().await;
-
-        if let Some(cache_http) = guard.as_ref() {
-            Ok(cache_http.cache.shard_count().get())
-        } else {
-            if let Some(ref shards) = self.cmd_args.shards {
-                return Ok(shards.len() as u16);
-            }
-
-            Ok(1)
-        }
-    }
-
-    /// Returns the shard messenger given the shard id
-    async fn shard_messenger(
-        &self,
-        shard_id: serenity::all::ShardId,
-    ) -> Result<serenity::all::ShardMessenger, Error> {
-        let guard = self.shard_manager.read().await;
-
-        if let Some(shard_manager) = guard.as_ref() {
-            let runners = shard_manager.runners.lock().await;
-            let runner = runners
-                .get(&shard_id)
-                .ok_or_else(|| Error::from(format!("Shard {} not found", shard_id)))?;
-
-            Ok(runner.runner_tx.clone())
-        } else {
-            Err("Shard manager not initialized".into())
-        }
-    }
-
-    async fn total_guilds(&self) -> Result<u64, Error> {
-        let guard = self.cache_http.read().await;
-
-        if let Some(cache_http) = guard.as_ref() {
-            Ok(cache_http.cache.guilds().len() as u64)
-        } else {
-            Ok(0)
-        }
-    }
-
-    async fn total_users(&self) -> Result<u64, Error> {
-        let guard = self.cache_http.read().await;
-
-        if let Some(cache_http) = guard.as_ref() {
-            let mut count = 0;
-
-            for guild in cache_http.cache.guilds() {
-                {
-                    let guild = guild.to_guild_cached(&cache_http.cache);
-
-                    if let Some(guild) = guild {
-                        count += guild.member_count;
-                    }
-                }
-
-                tokio::task::yield_now().await;
-            }
-
-            Ok(count)
-        } else {
-            Ok(0)
-        }
-    }
-}
 
 async fn event_listener(
     ctx: poise::FrameworkContext<'_, Data, Error>,
@@ -166,20 +48,6 @@ async fn event_listener(
                 data_about_bot.user.name, ctx.serenity_context.shard_id
             );
 
-            // Set props
-            let data = ctx.serenity_context.data::<Data>();
-            let props = data.props.as_any().downcast_ref::<Props>().unwrap();
-
-            let cache_http = CacheHttpImpl::from_ctx(ctx.serenity_context);
-            let mut guard = props.cache_http.write().await;
-            *guard = Some(cache_http);
-            drop(guard);
-
-            let shard_manager = ctx.shard_manager.clone();
-            let mut guard = props.shard_manager.write().await;
-            *guard = Some(shard_manager);
-            drop(guard);
-
             // We don't really care which shard runs this, we just need one to run it
             //let data = ctx.serenity_context.data::<Data>();
             //let serenity_context = ctx.serenity_context.clone();
@@ -193,7 +61,7 @@ async fn event_listener(
                     log::info!("Starting RPC server");
 
                     let rpc_server =
-                        rust_rpc_server_bot::create_bot_rpc_server(data.clone(), &serenity_context);
+                        crate::rpc::create_bot_rpc_server(data.clone(), &serenity_context);
 
                     let opts = rust_rpc_server::CreateRpcServerOptions {
                         bind: rust_rpc_server::CreateRpcServerBind::Address(format!(
@@ -232,15 +100,8 @@ pub async fn start() {
 
     let mut env_builder = env_logger::builder();
 
-    let mut default_filter =
+    let default_filter =
         "serenity=error,rust_bot=info,bot_binutils=info,rust_rpc_server=info,rust_rpc_server_bot=info,botox=info,templating=debug,sqlx=error".to_string();
-
-    for module in modules() {
-        let module_id = module.id();
-        let module_filter = format!("bot_modules_{}=info", module_id);
-        default_filter.push(',');
-        default_filter.push_str(module_filter.as_str());
-    }
 
     env_builder
         .format(move |buf, record| {
@@ -320,16 +181,6 @@ pub async fn start() {
 
     let client_builder = serenity::all::ClientBuilder::new_with_http(http, intents);
 
-    let module_cache = {
-        let mut module_cache = modules::cache::ModuleCache::default();
-
-        for module in modules() {
-            module_cache.add_module(module);
-        }
-
-        Arc::new(module_cache)
-    };
-
     let framework_opts = poise::FrameworkOptions {
         initialize_owners: true,
         prefix_options: poise::PrefixFrameworkOptions {
@@ -337,7 +188,10 @@ pub async fn start() {
             ..poise::PrefixFrameworkOptions::default()
         },
         event_handler: |ctx, event| Box::pin(event_listener(ctx, event)),
-        commands: crate::binutils::get_commands(&module_cache),
+        commands: crate::bot::raw_commands()
+            .into_iter()
+            .map(|(c, _, _)| c)
+            .collect::<Vec<_>>(),
         command_check: Some(|ctx| Box::pin(crate::binutils::command_check(ctx))),
         pre_command: |ctx| {
             Box::pin(async move {
@@ -387,13 +241,6 @@ pub async fn start() {
         .build()
         .expect("Could not initialize reqwest client");
 
-    let props = Arc::new(Props {
-        cmd_args: cmd_args.clone(),
-        cache_http: Arc::new(RwLock::new(None)),
-        shard_manager: Arc::new(RwLock::new(None)),
-        module_cache,
-    });
-
     let data = Data {
         object_store: Arc::new(
             config::CONFIG
@@ -403,8 +250,6 @@ pub async fn start() {
         ),
         pool: pg_pool.clone(),
         reqwest,
-        extra_data: dashmap::DashMap::new(),
-        props: props.clone(),
     };
 
     let mut client = client_builder

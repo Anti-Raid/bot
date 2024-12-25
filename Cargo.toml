@@ -12,18 +12,26 @@ env_logger = "0.11"
 sqlx = { version = "0.8", features = [ "runtime-tokio-rustls", "postgres", "chrono", "uuid", "json"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "rustls-tls-native-roots"] }
 dashmap = { version = "6", features = ["serde", "inline", "rayon"] }
-async-trait = "0.1.80"
+async-trait = "0.1"
 clap = { version = "4.5.16", features = ["derive"] }
 serde_json = "1.0"
+serde = "1"
 indexmap = { version = "2", features = ["serde"] }
+futures-util = "0.3"
+axum = { version = "0.7.5", features = ["macros"] }
+tower-http = { version = "0.5.2", features = ["trace"] }
 
 # Modules
-modules = { path = "./crates/rust.modules" }
-bot_modules_default = { path = "./crates/rust.bot_modules_default" }
 rust_rpc_server = { path = "../../core/rust/rust.rpc_server" }
-rust_rpc_server_bot = { path = "./crates/rust.rpc_server.bot" }
 config = { path = "../../core/rust/rust.config" }
 silverpelt = { path = "../../core/rust/rust.silverpelt" }
+jobserver = { path = "../../core/rust/rust.jobserver" }
+lockdowns = { path = "../../core/rust/rust.lockdowns" }
+splashcore_rs = { path = "../../core/rust/rust.std" }
+ar_settings = { path = "../../core/rust/rust.settings" }
+sandwich_driver = { path = "../../core/rust/rust.sandwich_driver" }
+gwevent = { path = "../../core/rust/rust.gwevent" }
+rust_buildstats = { path = "./crates/rust.buildstats" }
 
 [dependencies.tokio]
 version = "1"
@@ -36,4 +44,8 @@ features = ["model", "http", "cache", "rustls_backend", "unstable"]
 
 [dependencies.botox]
 git = "https://github.com/Anti-Raid/botox"
+branch = "main"
+
+[dependencies.kittycat]
+git = "https://github.com/infinitybotlist/kittycat"
 branch = "main"

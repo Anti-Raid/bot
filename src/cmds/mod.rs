@@ -1,7 +1,6 @@
 mod bot;
 mod poise_register;
 mod serenity_test;
-mod tester;
 
 use std::fs::File;
 use std::io::Write;
@@ -75,9 +74,6 @@ pub async fn cmd_loader() {
             println!("Saving channel_types.json/channel_types_inv.json");
 
             generate_channel_types_json();
-        }
-        Some("test") => {
-            tester::run_tester().await;
         }
         Some("serenity.test") => {
             serenity_test::test_serenity().await;

@@ -1,5 +1,5 @@
+use crate::{Context, Error};
 use log::error;
-use modules::Error;
 use silverpelt::data::Data;
 
 /// Standard error handler for Anti-Raid
@@ -139,7 +139,7 @@ Please check out the `User Guide` and use the `Website` to tailor AntiRaid to th
     )
 }
 
-pub async fn command_check(ctx: modules::Context<'_>) -> Result<bool, Error> {
+pub async fn command_check(ctx: Context<'_>) -> Result<bool, Error> {
     let guild_id = ctx.guild_id();
 
     let Some(guild_id) = guild_id else {
@@ -203,8 +203,7 @@ pub async fn command_check(ctx: modules::Context<'_>) -> Result<bool, Error> {
 
     let command = ctx.command();
 
-    if let Err(res) = modules::permission_checks::check_command(
-        &modules::module_cache(&data),
+    if let Err(res) = crate::botlib::permission_checks::check_command(
         &command.qualified_name,
         guild_id,
         ctx.author().id,
@@ -229,66 +228,4 @@ pub async fn command_check(ctx: modules::Context<'_>) -> Result<bool, Error> {
     }
 
     Ok(true)
-}
-
-pub fn get_commands(
-    silverpelt_cache: &modules::cache::ModuleCache,
-) -> Vec<poise::Command<Data, Error>> {
-    let mut cmds = Vec::new();
-
-    let mut _cmd_names = Vec::new();
-    for module in silverpelt_cache.module_cache.iter() {
-        log::info!("Loading module {}", module.id());
-
-        match module.validate() {
-            Ok(_) => {}
-            Err(e) => {
-                panic!("Error validating module {}: {}", module.id(), e);
-            }
-        }
-
-        if module.virtual_module() {
-            continue;
-        }
-
-        for (mut cmd, _) in module.raw_commands() {
-            cmd.category = Some(module.id().into());
-
-            let mut subcommands = Vec::new();
-            // Ensure subcommands are also linked to a category
-            for subcommand in cmd.subcommands {
-                subcommands.push(poise::Command {
-                    category: Some(module.id().into()),
-                    ..subcommand
-                });
-            }
-
-            cmd.subcommands = subcommands;
-
-            // Check for duplicate command names
-            if _cmd_names.contains(&cmd.name) {
-                error!("Duplicate command name: {:#?}", cmd);
-                panic!("Duplicate command name: {}", cmd.qualified_name);
-            }
-
-            _cmd_names.push(cmd.name.clone());
-
-            // Check for duplicate command aliases
-            for alias in cmd.aliases.iter() {
-                if _cmd_names.contains(alias) {
-                    panic!(
-                        "Duplicate command alias: {} from command {}",
-                        alias, cmd.name
-                    );
-                }
-
-                _cmd_names.push(alias.clone());
-            }
-
-            // Good to go
-            cmds.push(cmd);
-        }
-    }
-
-    cmds
 }
