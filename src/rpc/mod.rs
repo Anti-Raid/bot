@@ -237,7 +237,7 @@ async fn check_user_has_permission(
     }): State<AppData>,
     Path((guild_id, user_id)): Path<(serenity::all::GuildId, serenity::all::UserId)>,
     Json(perms): Json<types::CheckUserHasKittycatPermissionsRequest>,
-) -> Response<String> {
+) -> Response<types::CheckCommandPermission> {
     let perms = crate::botlib::permission_checks::member_has_kittycat_perm(
         guild_id,
         user_id,
@@ -249,10 +249,12 @@ async fn check_user_has_permission(
     )
     .await;
 
-    match perms {
-        Ok(_) => Ok(Json("".to_string())),
-        Err(e) => Err((StatusCode::FORBIDDEN, e.to_string())),
-    }
+    Ok(Json(types::CheckCommandPermission {
+        result: match perms {
+            Ok(_) => None,
+            Err(e) => Some(e.to_string()),
+        },
+    }))
 }
 
 /// Returns if the user has permission to run a command on a given guild [CheckCommandPermission]
