@@ -1,5 +1,3 @@
-pub mod settings_execute;
-pub mod templating_exec;
 pub mod types;
 
 use axum::{
@@ -9,6 +7,9 @@ use axum::{
     Json, Router,
 };
 use std::sync::Arc;
+
+use ar_settings::{self, types::OperationType, types::SettingsError};
+use types::{CanonicalSettingsResult, SettingsOperationRequest};
 
 type Response<T> = Result<Json<T>, (StatusCode, String)>;
 
@@ -52,15 +53,10 @@ pub fn create_bot_rpc_server(
             "/check-user-has-permission/:guild_id/:user_id",
             post(check_user_has_permission),
         )
-        // Executes a template on a Lua VM
-        .route(
-            "/template-exec/:guild_id/:user_id",
-            post(templating_exec::execute_template),
-        )
         // Executes an operation on a setting [SettingsOperation]
         .route(
             "/settings-operation/:guild_id/:user_id",
-            post(settings_execute::settings_operation),
+            post(settings_operation),
         );
     let router: Router<()> = router.with_state(AppData::new(data, ctx));
     router.into_make_service()
@@ -284,4 +280,107 @@ async fn check_command_permission(
             Err(e) => Some(e.to_string()),
         },
     }))
+}
+
+/// Executes an operation on a setting [SettingsOperation]
+pub(crate) async fn settings_operation(
+    State(AppData {
+        serenity_context, ..
+    }): State<AppData>,
+    Path((guild_id, user_id)): Path<(serenity::all::GuildId, serenity::all::UserId)>,
+    Json(req): Json<SettingsOperationRequest>,
+) -> Json<types::CanonicalSettingsResult> {
+    let op: OperationType = req.op;
+
+    // Find the setting
+    let mut setting = None;
+
+    for setting_obj in crate::bot::config_options() {
+        if setting_obj.id == req.setting {
+            setting = Some(setting_obj);
+            break;
+        }
+    }
+
+    //if let Some(page_setting) = templating::cache::get_setting(guild_id, &req.setting).await {
+    //    setting = Some(page_setting);
+    //};
+
+    let Some(setting) = setting else {
+        return Json(CanonicalSettingsResult::Err {
+            error: SettingsError::Generic {
+                message: "Setting not found".to_string(),
+                src: "SettingsOperationCore".to_string(),
+                typ: "client".to_string(),
+            },
+        });
+    };
+
+    match op {
+        OperationType::View => {
+            match ar_settings::cfg::settings_view(
+                &setting,
+                &crate::botlib::helpers::settings_data(serenity_context),
+                guild_id,
+                user_id,
+                req.fields,
+            )
+            .await
+            {
+                Ok(res) => Json(CanonicalSettingsResult::Ok { fields: res }),
+                Err(e) => Json(CanonicalSettingsResult::Err { error: e }),
+            }
+        }
+        OperationType::Create => {
+            match ar_settings::cfg::settings_create(
+                &setting,
+                &crate::botlib::helpers::settings_data(serenity_context),
+                guild_id,
+                user_id,
+                req.fields,
+            )
+            .await
+            {
+                Ok(res) => Json(CanonicalSettingsResult::Ok { fields: vec![res] }),
+                Err(e) => Json(CanonicalSettingsResult::Err { error: e }),
+            }
+        }
+        OperationType::Update => {
+            match ar_settings::cfg::settings_update(
+                &setting,
+                &crate::botlib::helpers::settings_data(serenity_context),
+                guild_id,
+                user_id,
+                req.fields,
+            )
+            .await
+            {
+                Ok(res) => Json(CanonicalSettingsResult::Ok { fields: vec![res] }),
+                Err(e) => Json(CanonicalSettingsResult::Err { error: e }),
+            }
+        }
+        OperationType::Delete => {
+            let Some(pkey) = req.fields.get(&setting.primary_key) else {
+                return Json(CanonicalSettingsResult::Err {
+                    error: SettingsError::MissingOrInvalidField {
+                        field: setting.primary_key.to_string(),
+                        src: "SettingsOperation".to_string(),
+                    },
+                });
+            };
+
+            match ar_settings::cfg::settings_delete(
+                &setting,
+                &crate::botlib::helpers::settings_data(serenity_context),
+                guild_id,
+                user_id,
+                pkey.clone(),
+            )
+            .await
+            {
+                Ok(_res) => Json(CanonicalSettingsResult::Ok { fields: vec![] }),
+                Err(e) => Json(CanonicalSettingsResult::Err { error: e }),
+            }
+        }
+    }
 }

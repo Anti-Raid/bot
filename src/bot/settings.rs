@@ -1367,10 +1367,7 @@ impl SettingView for GuildTemplateExecutor {
                 "name".to_string() => Value::String(row.name),
                 "content".to_string() => Value::String(row.content),
                 "events".to_string() => {
-                    match row.events {
-                        Some(events) => Value::List(events.iter().map(|x| Value::String(x.to_string())).collect()),
-                        None => Value::None,
-                    }
+                    Value::List(row.events.iter().map(|x| Value::String(x.to_string())).collect())
                 },
                 "error_channel".to_string() => {
                     match row.error_channel {

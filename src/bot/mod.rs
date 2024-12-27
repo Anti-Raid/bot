@@ -153,7 +153,7 @@ pub fn raw_commands() -> Vec<(
                 "lockdowns remove".to_string() => vec!["lockdowns.remove (Kittycat)".to_string()],
             },
         ),
-        ((
+        (
             backups::backups(),
             |command, _user_id, native_perms, kittycat_perms| {
                 match command {
@@ -194,7 +194,7 @@ pub fn raw_commands() -> Vec<(
                 "backups delete".to_string() => vec!["MANAGE_GUILD (Discord) *OR* backups.delete (Kittycat)".to_string()],
                 "backups restore".to_string() => vec!["ADMINISTRATOR (Discord) *OR* backups.restore (Kittycat)".to_string()],
             },
-        )),
+        ),
     ]
 }
 
