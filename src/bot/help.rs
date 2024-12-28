@@ -7,20 +7,6 @@ pub async fn filter(
     state: &HelpState,
     cmd: &poise::Command<silverpelt::data::Data, silverpelt::Error>,
 ) -> Result<bool, Error> {
-    let Some(ref module) = cmd.category else {
-        return Err("Internal error: command has no category".into());
-    };
-
-    // TODO: Actually handle checking command permissions
-    if module == "root"
-        && !config::CONFIG
-            .discord_auth
-            .root_users
-            .contains(&ctx.author().id)
-    {
-        return Ok(false);
-    }
-
     if state.filter_by_perms {
         let Some(guild_id) = ctx.guild_id() else {
             return Err("You must be in a guild to use ``filter_by_perms``".into());
