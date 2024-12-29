@@ -1328,7 +1328,7 @@ impl GuildTemplateExecutor {
     async fn post_action(&self, ctx: &HookContext<'_>, name: &str) -> Result<(), SettingsError> {
         // Dispatch a OnStartup event for the template
         silverpelt::ar_event::AntiraidEvent::OnStartup(vec![name.to_string()])
-            .dispatch_to_template_worker(&ctx.data.data, ctx.guild_id)
+            .dispatch_to_template_worker_and_nowait(&ctx.data.data, ctx.guild_id)
             .await
             .map_err(|e| SettingsError::Generic {
                 message: format!("Failed to dispatch OnStartup event: {:?}", e),

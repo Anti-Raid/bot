@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use serenity::all::{GuildId, UserId};
 use serenity::small_fixed_array::FixedArray;
 use sqlx::PgPool;
@@ -211,7 +213,11 @@ pub async fn check_command(
             "roles": roles,
         }),
     })
-    .dispatch_to_template_worker(&serenity_context.data::<silverpelt::data::Data>(), guild_id)
+    .dispatch_to_template_worker_and_wait(
+        &serenity_context.data::<silverpelt::data::Data>(),
+        guild_id,
+        Duration::from_secs(1),
+    )
     .await
     {
         Ok(_) => {}
@@ -270,7 +276,11 @@ pub async fn member_has_kittycat_perm(
             "roles": roles,
         }),
     })
-    .dispatch_to_template_worker(&serenity_context.data::<silverpelt::data::Data>(), guild_id)
+    .dispatch_to_template_worker_and_wait(
+        &serenity_context.data::<silverpelt::data::Data>(),
+        guild_id,
+        Duration::from_secs(1),
+    )
     .await
     {
         Ok(_) => {}

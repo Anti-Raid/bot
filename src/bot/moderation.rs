@@ -11,7 +11,7 @@ use splashcore_rs::utils::{
     create_special_allocation_from_str, parse_duration_string, parse_numeric_list_to_str, Unit,
     REPLACE_CHANNEL,
 };
-use std::collections::HashMap;
+use std::{collections::HashMap, time::Duration};
 
 /// Helper method to get the username of a user
 fn username(m: &User) -> String {
@@ -309,7 +309,7 @@ async fn prune(
             },
         }),
     })
-    .dispatch_to_template_worker(&data, guild_id)
+    .dispatch_to_template_worker_and_wait(&data, guild_id, Duration::from_secs(1))
     .await?;
 
     embed = CreateEmbed::new()
@@ -425,7 +425,7 @@ async fn kick(
             "log": to_log_format(&author.user, &member.user, &reason),
         }),
     })
-    .dispatch_to_template_worker(&data, guild_id)
+    .dispatch_to_template_worker_and_wait(&data, guild_id, Duration::from_secs(1))
     .await?;
 
     let mut embed = CreateEmbed::new()
@@ -502,7 +502,7 @@ async fn kick(
             "log": to_log_format(&author.user, &member.user, &reason),
         }),
     })
-    .dispatch_to_template_worker(&data, guild_id)
+    .dispatch_to_template_worker_and_wait(&data, guild_id, Duration::from_secs(1))
     .await?;
 
     p.dispatch_event(ctx.serenity_context().clone()).await?;
@@ -583,7 +583,7 @@ async fn ban(
             "log": to_log_format(&author.user, &member, &reason),
         }),
     })
-    .dispatch_to_template_worker(&data, guild_id)
+    .dispatch_to_template_worker_and_wait(&data, guild_id, Duration::from_secs(1))
     .await?;
 
     let mut embed = CreateEmbed::new()
@@ -662,7 +662,7 @@ async fn ban(
             "log": to_log_format(&author.user, &member, &reason),
         }),
     })
-    .dispatch_to_template_worker(&data, guild_id)
+    .dispatch_to_template_worker_and_wait(&data, guild_id, Duration::from_secs(1))
     .await?;
 
     p.dispatch_event(ctx.serenity_context().clone()).await?;
@@ -747,7 +747,7 @@ async fn tempban(
             "duration": (duration.0 * duration.1.to_seconds()),
         }),
     })
-    .dispatch_to_template_worker(&data, guild_id)
+    .dispatch_to_template_worker_and_wait(&data, guild_id, Duration::from_secs(1))
     .await?;
 
     let mut embed = CreateEmbed::new()
@@ -831,7 +831,7 @@ async fn tempban(
             "duration": (duration.0 * duration.1.to_seconds()),
         }),
     })
-    .dispatch_to_template_worker(&data, guild_id)
+    .dispatch_to_template_worker_and_wait(&data, guild_id, Duration::from_secs(1))
     .await?;
 
     p.dispatch_event(ctx.serenity_context().clone()).await?;
@@ -903,7 +903,7 @@ async fn unban(
             "log": to_log_format(&author.user, &user, &reason),
         }),
     })
-    .dispatch_to_template_worker(&data, guild_id)
+    .dispatch_to_template_worker_and_wait(&data, guild_id, Duration::from_secs(1))
     .await?;
 
     let mut embed = CreateEmbed::new()
@@ -964,7 +964,7 @@ async fn unban(
             "log": to_log_format(&author.user, &user, &reason),
         }),
     })
-    .dispatch_to_template_worker(&data, guild_id)
+    .dispatch_to_template_worker_and_wait(&data, guild_id, Duration::from_secs(1))
     .await?;
 
     if let Some(sting_dispatch) = sting_dispatch {
@@ -1060,7 +1060,7 @@ async fn timeout(
             "duration": (duration.0 * duration.1.to_seconds()),
         }),
     })
-    .dispatch_to_template_worker(&data, guild_id)
+    .dispatch_to_template_worker_and_wait(&data, guild_id, Duration::from_secs(1))
     .await?;
 
     let mut embed = CreateEmbed::new()
@@ -1152,7 +1152,7 @@ async fn timeout(
             "duration": (duration.0 * duration.1.to_seconds()),
         }),
     })
-    .dispatch_to_template_worker(&data, guild_id)
+    .dispatch_to_template_worker_and_wait(&data, guild_id, Duration::from_secs(1))
     .await?;
 
     embed = CreateEmbed::new()
