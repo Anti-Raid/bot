@@ -1,5 +1,6 @@
 mod backups;
 mod help;
+mod load;
 mod lockdowns;
 mod moderation;
 mod ping;
@@ -193,6 +194,24 @@ pub fn raw_commands() -> Vec<(
                 "backups list".to_string() => vec!["MANAGE_GUILD (Discord) *OR* backups.list (Kittycat)".to_string()],
                 "backups delete".to_string() => vec!["MANAGE_GUILD (Discord) *OR* backups.delete (Kittycat)".to_string()],
                 "backups restore".to_string() => vec!["ADMINISTRATOR (Discord) *OR* backups.restore (Kittycat)".to_string()],
+            },
+        ),
+        (
+            load::load(),
+            |command, _user_id, native_perms, kittycat_perms| {
+                match command {
+                    "load" => {
+                        if !native_perms.contains(serenity::model::permissions::Permissions::MANAGE_GUILD) && !kittycat::perms::has_perm(&kittycat_perms, &"bot.load".to_string().into()) {
+                            return Err("Missing required permission: MANAGE_GUILD or bot.load".into());
+                        }
+
+                        Ok(())
+                    },
+                    _ => Err("Internal Error: No permissions needed found for command. Please contact support".into()),
+                }
+            },
+            indexmap::indexmap! {
+                "load".to_string() => vec!["MANAGE_GUILD (Discord) *OR* bot.load (Kittycat)".to_string()],
             },
         ),
     ]

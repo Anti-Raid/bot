@@ -1901,6 +1901,21 @@ pub static GUILD_TEMPLATE_SHOP: LazyLock<Setting> = LazyLock::new(|| {
                 secret: false,
             },
             Column {
+                id: "friendly_name".to_string(),
+                name: "Friendly Name".to_string(),
+                description: "The friendly name of the template on the shop.".to_string(),
+                column_type: ColumnType::new_scalar(InnerColumnType::String {
+                    kind: InnerColumnTypeStringKind::Normal {},
+                    min_length: None,
+                    max_length: Some(64),
+                    allowed_values: vec![],
+                }),
+                nullable: false,
+                suggestions: ColumnSuggestion::None {},
+                ignored_for: vec![],
+                secret: false,
+            },
+            Column {
                 id: "version".to_string(),
                 name: "Version".to_string(),
                 description: "The version of the template. Cannot be updated once set".to_string(), 
@@ -1948,6 +1963,21 @@ pub static GUILD_TEMPLATE_SHOP: LazyLock<Setting> = LazyLock::new(|| {
                 secret: false,
             },
             Column {
+                id: "events".to_string(),
+                name: "Events".to_string(),
+                description: "The events this template should have access to, Cannot be changed once set".to_string(),
+                column_type: ColumnType::new_array(InnerColumnType::String {
+                    kind: InnerColumnTypeStringKind::Normal {},
+                    min_length: None,
+                    max_length: None,
+                    allowed_values: vec![],
+                }),
+                nullable: false,
+                suggestions: ColumnSuggestion::None {},
+                ignored_for: vec![OperationType::Update],
+                secret: false,
+            },
+            Column {
                 id: "type".to_string(),
                 name: "Type".to_string(),
                 description: "The type of the template".to_string(),
@@ -1985,7 +2015,7 @@ impl SettingView for GuildTemplateShopExecutor {
     ) -> Result<Vec<indexmap::IndexMap<String, splashcore_rs::value::Value>>, SettingsError> {
         check_perms(&context, &"guild_templates_shop.view".into()).await?;
 
-        let rows = sqlx::query!("SELECT id, name, version, description, type, created_at, created_by, last_updated_at, last_updated_by FROM template_shop WHERE owner_guild = $1", context.guild_id.to_string())
+        let rows = sqlx::query!("SELECT id, name, friendly_name, version, description, type, events, created_at, created_by, last_updated_at, last_updated_by FROM template_shop WHERE owner_guild = $1", context.guild_id.to_string())
         .fetch_all(&context.data.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
@@ -2000,9 +2030,13 @@ impl SettingView for GuildTemplateShopExecutor {
             let map = indexmap::indexmap! {
                 "id".to_string() => Value::String(row.id.to_string()),
                 "name".to_string() => Value::String(row.name),
+                "friendly_name".to_string() => Value::String(row.friendly_name),
                 "version".to_string() => Value::String(row.version),
                 "description".to_string() => Value::String(row.description),
                 "type".to_string() => Value::String(row.r#type),
+                "events".to_string() => {
+                    Value::List(row.events.iter().map(|x| Value::String(x.to_string())).collect())
+                },
                 "owner_guild".to_string() => Value::String(context.guild_id.to_string()),
                 "created_at".to_string() => Value::TimestampTz(row.created_at),
                 "created_by".to_string() => Value::String(row.created_by),
@@ -2098,6 +2132,13 @@ impl SettingCreator for GuildTemplateShopExecutor {
             });
         }
 
+        let Some(Value::String(friendly_name)) = entry.get("friendly_name") else {
+            return Err(SettingsError::MissingOrInvalidField {
+                field: "friendly_name".to_string(),
+                src: "GuildTemplateShopExecutor".to_string(),
+            });
+        };
+
         let Some(Value::String(version)) = entry.get("version") else {
             return Err(SettingsError::MissingOrInvalidField {
                 field: "version".to_string(),
@@ -2150,13 +2191,33 @@ impl SettingCreator for GuildTemplateShopExecutor {
             });
         };
 
+        let events = match entry.get("events") {
+            Some(Value::List(events)) => events
+                .iter()
+                .map(|x| {
+                    if let Value::String(x) = x {
+                        Ok(x.to_string())
+                    } else {
+                        Err(SettingsError::Generic {
+                            message: "Failed to parse events".to_string(),
+                            src: "GuildTemplateShopExecutor".to_string(),
+                            typ: "internal".to_string(),
+                        })
+                    }
+                })
+                .collect::<Result<Vec<String>, SettingsError>>()?,
+            _ => vec![],
+        };
+
         let id = sqlx::query!(
-            "INSERT INTO template_shop (name, version, description, content, type, owner_guild, created_by, last_updated_by) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id",
+            "INSERT INTO template_shop (name, friendly_name, version, description, content, type, events, owner_guild, created_by, last_updated_by) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id",
             name,
+            friendly_name,
             version,
             description,
             content,
             r#type,
+            &events,
             ctx.guild_id.to_string(),
             ctx.author.to_string(),
             ctx.author.to_string()
@@ -2214,6 +2275,13 @@ impl SettingUpdater for GuildTemplateShopExecutor {
             });
         }
 
+        let Some(Value::String(friendly_name)) = entry.get("friendly_name") else {
+            return Err(SettingsError::MissingOrInvalidField {
+                field: "friendly_name".to_string(),
+                src: "GuildTemplateShopExecutor".to_string(),
+            });
+        };
+
         let Some(Value::String(description)) = entry.get("description") else {
             return Err(SettingsError::MissingOrInvalidField {
                 field: "description".to_string(),
@@ -2229,9 +2297,10 @@ impl SettingUpdater for GuildTemplateShopExecutor {
         };
 
         sqlx::query!(
-            "UPDATE template_shop SET description = $1, type = $2, last_updated_at = NOW(), last_updated_by = $3 WHERE owner_guild = $4 AND id = $5",
+            "UPDATE template_shop SET description = $1, type = $2, friendly_name = $3, last_updated_at = NOW(), last_updated_by = $4 WHERE owner_guild = $5 AND id = $6",
             description,
             r#type,
+            friendly_name,
             ctx.author.to_string(),
             ctx.guild_id.to_string(),
             id
