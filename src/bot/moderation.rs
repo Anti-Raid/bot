@@ -6,10 +6,10 @@ use sandwich_driver::{guild, member_in_guild};
 use serenity::all::{
     ChannelId, CreateEmbed, EditMember, EditMessage, GuildId, Mentionable, Timestamp, User, UserId,
 };
-use silverpelt::Error;
+use silverpelt::{punishments::PunishmentState, Error};
 use splashcore_rs::utils::{
-    create_special_allocation_from_str, parse_duration_string, parse_numeric_list_to_str, Unit,
-    REPLACE_CHANNEL,
+    create_special_allocation_from_str, parse_duration_string, parse_numeric_list,
+    parse_numeric_list_to_str, Unit, REPLACE_CHANNEL,
 };
 use std::{collections::HashMap, time::Duration};
 
@@ -229,32 +229,6 @@ async fn prune(
         return Err("Stings must be greater than or equal to 0".into());
     }
 
-    let mut tx = ctx.data().pool.begin().await?;
-
-    let mut sting_dispatch = None;
-
-    if stings > 0 {
-        sting_dispatch = Some(
-            silverpelt::stings::StingCreate {
-                src: Some("moderation:prune_user".to_string()),
-                stings,
-                reason: Some(reason.clone()),
-                void_reason: None,
-                guild_id,
-                creator: silverpelt::stings::StingTarget::User(author.user.id),
-                target: match user {
-                    Some(ref user) => silverpelt::stings::StingTarget::User(user.id),
-                    None => silverpelt::stings::StingTarget::System,
-                },
-                state: silverpelt::stings::StingState::Active,
-                duration: None,
-                sting_data: None,
-            }
-            .create_without_dispatch(&mut *tx)
-            .await?,
-        );
-    }
-
     // If we're pruning messages, do that
     let prune_opts = create_message_prune_serde(
         user.as_ref().map(|u| u.id),
@@ -270,16 +244,76 @@ async fn prune(
 
     let data = ctx.data();
 
+    // Fire ModerationStart event
+    let author_user_id = author.user.id;
+    let target_user_id = user.as_ref().map(|u| u.id);
+    let correlation_id = sqlx::types::uuid::Uuid::new_v4();
+    let results = silverpelt::ar_event::AntiraidEvent::ModerationStart(
+        silverpelt::ar_event::ModerationStartEventData {
+            correlation_id,
+            reason: Some(reason.clone()),
+            author: match author {
+                std::borrow::Cow::Borrowed(member) => member.clone(),
+                std::borrow::Cow::Owned(member) => member,
+            },
+            action: silverpelt::ar_event::ModerationAction::Prune {
+                user,
+                prune_opts: prune_opts.clone(),
+                channels: if let Some(ref channels) = prune_channels {
+                    parse_numeric_list::<ChannelId>(channels, &REPLACE_CHANNEL)?
+                } else {
+                    Vec::new()
+                },
+            },
+            num_stings: stings,
+        },
+    )
+    .dispatch_to_template_worker_and_wait(&data, guild_id, Duration::from_secs(1))
+    .await?;
+
+    if !results.can_execute() {
+        // Check for hierarchy
+        if let Some(user) = target_user_id {
+            check_hierarchy(&ctx, user).await?;
+        }
+    }
+
+    let mut tx = ctx.data().pool.begin().await?;
+
+    let mut sting_dispatch = None;
+
+    if stings > 0 {
+        sting_dispatch = Some(
+            silverpelt::stings::StingCreate {
+                src: Some("moderation:prune_user".to_string()),
+                stings,
+                reason: Some(reason),
+                void_reason: None,
+                guild_id,
+                creator: silverpelt::stings::StingTarget::User(author_user_id),
+                target: match target_user_id {
+                    Some(id) => silverpelt::stings::StingTarget::User(id),
+                    None => silverpelt::stings::StingTarget::System,
+                },
+                state: silverpelt::stings::StingState::Active,
+                duration: None,
+                sting_data: None,
+            }
+            .create_without_dispatch(&mut *tx)
+            .await?,
+        );
+    }
+
     // Make request to jobserver
     let id = jobserver::spawn::spawn_task(
         &data.reqwest,
         &jobserver::Spawn {
             name: "message_prune".to_string(),
-            data: prune_opts.clone(),
+            data: prune_opts,
             create: true,
             execute: true,
             id: None,
-            user_id: author.user.id.to_string(),
+            user_id: author_user_id.to_string(),
         },
     )
     .await?
@@ -287,30 +321,12 @@ async fn prune(
 
     tx.commit().await?;
 
+    // Lastly, fire sting create event
     if let Some(sting_dispatch) = sting_dispatch {
         sting_dispatch
             .dispatch_create_event(ctx.serenity_context().clone())
             .await?;
     };
-
-    silverpelt::ar_event::AntiraidEvent::Custom(silverpelt::ar_event::CustomEvent {
-        event_name: "AR/PruneUser".to_string(),
-        event_titlename: "(Anti-Raid) Prune User".to_string(),
-        event_data: serde_json::json!({
-            "log": match user {
-                Some(user) => to_log_format(&author.user, &user, &reason),
-                None => format!("{} | Pruning messages for all users", username(&author.user)),
-            },
-            "prune_opts": prune_opts,
-            "channels": if let Some(ref channels) = prune_channels {
-                parse_numeric_list_to_str::<ChannelId>(channels, &REPLACE_CHANNEL)?
-            } else {
-                Vec::new()
-            },
-        }),
-    })
-    .dispatch_to_template_worker_and_wait(&data, guild_id, Duration::from_secs(1))
-    .await?;
 
     embed = CreateEmbed::new()
         .title("Pruning User Messages...")
@@ -370,6 +386,12 @@ async fn prune(
         }
     }
 
+    silverpelt::ar_event::AntiraidEvent::ModerationEnd(
+        silverpelt::ar_event::ModerationEndEventData { correlation_id },
+    )
+    .dispatch_to_template_worker_and_nowait(&data, guild_id)
+    .await?;
+
     Ok(())
 }
 
@@ -406,34 +428,44 @@ async fn kick(
 
     let data = ctx.data();
 
-    // Check user hierarchy before performing moderative actions
-    check_hierarchy(&ctx, member.user.id).await?;
-
     // Dispatch event to modules, erroring out if the dispatch errors (e.g. limits hit due to a lua template etc)
     let Some(author) = ctx.author_member().await else {
         return Err("This command can only be used in a guild".into());
     };
 
-    silverpelt::ar_event::AntiraidEvent::Custom(silverpelt::ar_event::CustomEvent {
-        event_name: "AR/KickMember/Start".to_string(),
-        event_titlename: "(Anti-Raid) Kick Member (Pre-Warning)".to_string(),
-        event_data: serde_json::json!({
-            "target": member.clone(),
-            "moderator": author,
-            "reason": reason.clone(),
-            "stings": stings,
-            "log": to_log_format(&author.user, &member.user, &reason),
-        }),
-    })
+    let kick_log_msg = to_log_format(&author.user, &member.user, &reason);
+
+    let correlation_id = sqlx::types::Uuid::new_v4();
+    let author_user_id = author.user.id;
+    let target_user_id = member.user.id;
+    let target_mention = member.mention();
+
+    let results = silverpelt::ar_event::AntiraidEvent::ModerationStart(
+        silverpelt::ar_event::ModerationStartEventData {
+            correlation_id,
+            reason: Some(reason.clone()),
+            action: silverpelt::ar_event::ModerationAction::Kick { member },
+            author: match author {
+                std::borrow::Cow::Borrowed(member) => member.clone(),
+                std::borrow::Cow::Owned(member) => member,
+            },
+            num_stings: stings,
+        },
+    )
     .dispatch_to_template_worker_and_wait(&data, guild_id, Duration::from_secs(1))
     .await?;
+
+    if !results.can_execute() {
+        // Fallback to simple hierarchy check
+        check_hierarchy(&ctx, target_user_id).await?;
+    }
 
     let mut embed = CreateEmbed::new()
         .title("Kicking Member...")
         .description(format!(
             "{} | Kicking {}",
             get_icon_of_state("pending"),
-            member.mention()
+            target_mention
         ));
 
     let mut base_message = ctx
@@ -455,8 +487,8 @@ async fn kick(
                 reason: Some(reason.clone()),
                 void_reason: None,
                 guild_id,
-                creator: silverpelt::stings::StingTarget::User(author.user.id),
-                target: silverpelt::stings::StingTarget::User(member.user.id),
+                creator: silverpelt::stings::StingTarget::User(author_user_id),
+                target: silverpelt::stings::StingTarget::User(target_user_id),
                 state: silverpelt::stings::StingState::Active,
                 duration: None,
                 sting_data: None,
@@ -468,42 +500,25 @@ async fn kick(
 
     // Create new punishment
     let p = silverpelt::punishments::PunishmentCreate {
-        module: "moderation".to_string(),
         src: Some("kick".to_string()),
         guild_id,
         punishment: "kick".to_string(),
-        creator: silverpelt::punishments::PunishmentTarget::User(author.user.id),
-        target: silverpelt::punishments::PunishmentTarget::User(member.user.id),
+        creator: silverpelt::punishments::PunishmentTarget::User(author_user_id),
+        target: silverpelt::punishments::PunishmentTarget::User(target_user_id),
         handle_log: serde_json::json!({}),
         duration: None,
         reason: reason.clone(),
         data: None,
+        state: PunishmentState::Active,
     }
     .create_without_dispatch(&mut *tx)
     .await?;
 
-    member
-        .kick(
-            ctx.http(),
-            Some(&to_log_format(&author.user, &member.user, &reason)),
-        )
+    guild_id
+        .kick(ctx.http(), target_user_id, Some(&kick_log_msg))
         .await?;
 
     tx.commit().await?;
-
-    silverpelt::ar_event::AntiraidEvent::Custom(silverpelt::ar_event::CustomEvent {
-        event_name: "AR/KickMember/End".to_string(),
-        event_titlename: "(Anti-Raid) Kick Member (Post-Warning)".to_string(),
-        event_data: serde_json::json!({
-            "target": member,
-            "moderator": author,
-            "reason": reason.clone(),
-            "stings": stings,
-            "log": to_log_format(&author.user, &member.user, &reason),
-        }),
-    })
-    .dispatch_to_template_worker_and_wait(&data, guild_id, Duration::from_secs(1))
-    .await?;
 
     p.dispatch_event(ctx.serenity_context().clone()).await?;
     if let Some(sting_dispatch) = sting_dispatch {
@@ -512,12 +527,18 @@ async fn kick(
             .await?;
     };
 
+    silverpelt::ar_event::AntiraidEvent::ModerationEnd(
+        silverpelt::ar_event::ModerationEndEventData { correlation_id },
+    )
+    .dispatch_to_template_worker_and_nowait(&data, guild_id)
+    .await?;
+
     embed = CreateEmbed::new()
         .title("Kicking Member...")
         .description(format!(
             "{} | Kicked {}",
             get_icon_of_state("completed"),
-            member.mention()
+            target_mention
         ));
 
     base_message
@@ -536,7 +557,7 @@ async fn kick(
 )]
 async fn ban(
     ctx: Context<'_>,
-    #[description = "The member to ban"] member: serenity::all::User,
+    #[description = "The member to ban"] user: serenity::all::User,
     #[description = "The reason for the ban"]
     #[max_length = 384]
     reason: String,
@@ -563,35 +584,47 @@ async fn ban(
 
     let data = ctx.data();
 
-    // Check user hierarchy before performing moderative actions
-    check_hierarchy(&ctx, member.id).await?;
-
     // Dispatch event to modules, erroring out if the dispatch errors (e.g. limits hit due to a lua template etc)
     let Some(author) = ctx.author_member().await else {
         return Err("This command can only be used in a guild".into());
     };
 
-    silverpelt::ar_event::AntiraidEvent::Custom(silverpelt::ar_event::CustomEvent {
-        event_name: "AR/BanMember/Start".to_string(),
-        event_titlename: "(Anti-Raid) Ban Member (Pre-Warning)".to_string(),
-        event_data: serde_json::json!({
-            "target": member,
-            "moderator": author,
-            "reason": reason,
-            "stings": stings,
-            "prune_dmd": dmd,
-            "log": to_log_format(&author.user, &member, &reason),
-        }),
-    })
+    let ban_log_msg = to_log_format(&author.user, &user, &reason);
+
+    let correlation_id = sqlx::types::Uuid::new_v4();
+    let author_user_id = author.user.id;
+    let target_user_id = user.id;
+    let target_mention = user.mention();
+
+    let results = silverpelt::ar_event::AntiraidEvent::ModerationStart(
+        silverpelt::ar_event::ModerationStartEventData {
+            correlation_id,
+            reason: Some(reason.clone()),
+            action: silverpelt::ar_event::ModerationAction::Ban {
+                user,
+                prune_dmd: dmd,
+            },
+            author: match author {
+                std::borrow::Cow::Borrowed(member) => member.clone(),
+                std::borrow::Cow::Owned(member) => member,
+            },
+            num_stings: stings,
+        },
+    )
     .dispatch_to_template_worker_and_wait(&data, guild_id, Duration::from_secs(1))
     .await?;
+
+    if !results.can_execute() {
+        // Fallback to simple hierarchy check
+        check_hierarchy(&ctx, target_user_id).await?;
+    }
 
     let mut embed = CreateEmbed::new()
         .title("Banning Member...")
         .description(format!(
             "{} | Banning {}",
             get_icon_of_state("pending"),
-            member.mention()
+            target_mention
         ));
 
     let mut base_message = ctx
@@ -612,8 +645,8 @@ async fn ban(
                 reason: Some(reason.clone()),
                 void_reason: None,
                 guild_id,
-                creator: silverpelt::stings::StingTarget::User(author.user.id),
-                target: silverpelt::stings::StingTarget::User(member.id),
+                creator: silverpelt::stings::StingTarget::User(author_user_id),
+                target: silverpelt::stings::StingTarget::User(target_user_id),
                 state: silverpelt::stings::StingState::Active,
                 duration: None,
                 sting_data: None,
@@ -625,45 +658,25 @@ async fn ban(
 
     // Create new punishment
     let p = silverpelt::punishments::PunishmentCreate {
-        module: "moderation".to_string(),
         src: Some("ban".to_string()),
         guild_id,
         punishment: "ban".to_string(),
-        creator: silverpelt::punishments::PunishmentTarget::User(author.user.id),
-        target: silverpelt::punishments::PunishmentTarget::User(member.id),
+        creator: silverpelt::punishments::PunishmentTarget::User(author_user_id),
+        target: silverpelt::punishments::PunishmentTarget::User(target_user_id),
         handle_log: serde_json::json!({}),
         duration: None,
         reason: reason.clone(),
         data: None,
+        state: PunishmentState::Active,
     }
     .create_without_dispatch(&mut *tx)
     .await?;
 
     guild_id
-        .ban(
-            ctx.http(),
-            member.id,
-            dmd,
-            Some(&to_log_format(&author.user, &member, &reason)),
-        )
+        .ban(ctx.http(), target_user_id, dmd, Some(&ban_log_msg))
         .await?;
 
     tx.commit().await?;
-
-    silverpelt::ar_event::AntiraidEvent::Custom(silverpelt::ar_event::CustomEvent {
-        event_name: "AR/BanMember/End".to_string(),
-        event_titlename: "(Anti-Raid) Ban Member (Post-Warning)".to_string(),
-        event_data: serde_json::json!({
-            "target": member,
-            "moderator": author,
-            "reason": reason,
-            "stings": stings,
-            "prune_dmd": dmd,
-            "log": to_log_format(&author.user, &member, &reason),
-        }),
-    })
-    .dispatch_to_template_worker_and_wait(&data, guild_id, Duration::from_secs(1))
-    .await?;
 
     p.dispatch_event(ctx.serenity_context().clone()).await?;
     if let Some(sting_dispatch) = sting_dispatch {
@@ -672,12 +685,18 @@ async fn ban(
             .await?;
     };
 
+    silverpelt::ar_event::AntiraidEvent::ModerationEnd(
+        silverpelt::ar_event::ModerationEndEventData { correlation_id },
+    )
+    .dispatch_to_template_worker_and_nowait(&data, guild_id)
+    .await?;
+
     embed = CreateEmbed::new()
         .title("Banning Member...")
         .description(format!(
             "{} | Banned {}",
             get_icon_of_state("completed"),
-            member.mention()
+            target_mention
         ));
 
     base_message
@@ -696,7 +715,7 @@ async fn ban(
 )]
 async fn tempban(
     ctx: Context<'_>,
-    #[description = "The member to ban"] member: serenity::all::User,
+    #[description = "The user to ban"] user: serenity::all::User,
     #[description = "The reason for the ban"]
     #[max_length = 384]
     reason: String,
@@ -726,36 +745,48 @@ async fn tempban(
 
     let data = ctx.data();
 
-    // Check user hierarchy before performing moderative actions
-    check_hierarchy(&ctx, member.id).await?;
-
     // Dispatch event to modules, erroring out if the dispatch errors (e.g. limits hit due to a lua template etc)
     let Some(author) = ctx.author_member().await else {
         return Err("This command can only be used in a guild".into());
     };
 
-    silverpelt::ar_event::AntiraidEvent::Custom(silverpelt::ar_event::CustomEvent {
-        event_name: "AR/BanMemberTemporary/Start".to_string(),
-        event_titlename: "(Anti-Raid) Ban Member (Temporary) (Pre-Warning)".to_string(),
-        event_data: serde_json::json!({
-            "target": member,
-            "moderator": author,
-            "reason": reason,
-            "stings": stings,
-            "prune_dmd": dmd,
-            "log": to_log_format(&author.user, &member, &reason),
-            "duration": (duration.0 * duration.1.to_seconds()),
-        }),
-    })
+    let tempban_log_msg = to_log_format(&author.user, &user, &reason);
+
+    let correlation_id = sqlx::types::Uuid::new_v4();
+    let author_user_id = author.user.id;
+    let target_user_id = user.id;
+    let target_mention = user.mention();
+
+    let results = silverpelt::ar_event::AntiraidEvent::ModerationStart(
+        silverpelt::ar_event::ModerationStartEventData {
+            correlation_id,
+            reason: Some(reason.clone()),
+            action: silverpelt::ar_event::ModerationAction::TempBan {
+                user,
+                duration: (duration.0 * duration.1.to_seconds()),
+                prune_dmd: dmd,
+            },
+            author: match author {
+                std::borrow::Cow::Borrowed(member) => member.clone(),
+                std::borrow::Cow::Owned(member) => member,
+            },
+            num_stings: stings,
+        },
+    )
     .dispatch_to_template_worker_and_wait(&data, guild_id, Duration::from_secs(1))
     .await?;
+
+    if !results.can_execute() {
+        // Fallback to simple hierarchy check
+        check_hierarchy(&ctx, target_user_id).await?;
+    }
 
     let mut embed = CreateEmbed::new()
         .title("(Temporarily) Banning Member...")
         .description(format!(
             "{} | Banning {}",
             get_icon_of_state("pending"),
-            member.mention()
+            target_mention
         ));
 
     let mut base_message = ctx
@@ -776,8 +807,8 @@ async fn tempban(
                 reason: Some(reason.clone()),
                 void_reason: None,
                 guild_id,
-                creator: silverpelt::stings::StingTarget::User(author.user.id),
-                target: silverpelt::stings::StingTarget::User(member.id),
+                creator: silverpelt::stings::StingTarget::User(author_user_id),
+                target: silverpelt::stings::StingTarget::User(target_user_id),
                 state: silverpelt::stings::StingState::Active,
                 duration: Some(std::time::Duration::from_secs(
                     duration.0 * duration.1.to_seconds(),
@@ -791,48 +822,27 @@ async fn tempban(
 
     // Create new punishment
     let p = silverpelt::punishments::PunishmentCreate {
-        module: "moderation".to_string(),
         src: Some("tempban".to_string()),
         guild_id,
         punishment: "ban".to_string(),
-        creator: silverpelt::punishments::PunishmentTarget::User(author.user.id),
-        target: silverpelt::punishments::PunishmentTarget::User(member.id),
+        creator: silverpelt::punishments::PunishmentTarget::User(author_user_id),
+        target: silverpelt::punishments::PunishmentTarget::User(target_user_id),
         handle_log: serde_json::json!({}),
         duration: Some(std::time::Duration::from_secs(
             duration.0 * duration.1.to_seconds(),
         )),
         reason: reason.clone(),
         data: None,
+        state: PunishmentState::Active,
     }
     .create_without_dispatch(&mut *tx)
     .await?;
 
     guild_id
-        .ban(
-            ctx.http(),
-            member.id,
-            dmd,
-            Some(&to_log_format(&author.user, &member, &reason)),
-        )
+        .ban(ctx.http(), target_user_id, dmd, Some(&tempban_log_msg))
         .await?;
 
     tx.commit().await?;
-
-    silverpelt::ar_event::AntiraidEvent::Custom(silverpelt::ar_event::CustomEvent {
-        event_name: "AR/BanMemberTemporary/End".to_string(),
-        event_titlename: "(Anti-Raid) Ban Member (Temporary) (Post-Warning)".to_string(),
-        event_data: serde_json::json!({
-            "target": member,
-            "moderator": author,
-            "reason": reason,
-            "stings": stings,
-            "prune_dmd": dmd,
-            "log": to_log_format(&author.user, &member, &reason),
-            "duration": (duration.0 * duration.1.to_seconds()),
-        }),
-    })
-    .dispatch_to_template_worker_and_wait(&data, guild_id, Duration::from_secs(1))
-    .await?;
 
     p.dispatch_event(ctx.serenity_context().clone()).await?;
     if let Some(sting_dispatch) = sting_dispatch {
@@ -841,12 +851,18 @@ async fn tempban(
             .await?;
     };
 
+    silverpelt::ar_event::AntiraidEvent::ModerationEnd(
+        silverpelt::ar_event::ModerationEndEventData { correlation_id },
+    )
+    .dispatch_to_template_worker_and_nowait(&data, guild_id)
+    .await?;
+
     embed = CreateEmbed::new()
         .title("(Temporarily) Banned Member...")
         .description(format!(
             "{} | Banned {}",
             get_icon_of_state("completed"),
-            member.mention()
+            target_mention
         ));
 
     base_message
@@ -892,17 +908,25 @@ async fn unban(
         return Err("This command can only be used in a guild".into());
     };
 
-    silverpelt::ar_event::AntiraidEvent::Custom(silverpelt::ar_event::CustomEvent {
-        event_name: "AR/UnbanMember/Start".to_string(),
-        event_titlename: "(Anti-Raid) Unban Member (Pre-Warning)".to_string(),
-        event_data: serde_json::json!({
-            "target": user,
-            "moderator": author,
-            "reason": reason,
-            "stings": stings,
-            "log": to_log_format(&author.user, &user, &reason),
-        }),
-    })
+    let unban_log_msg = to_log_format(&author.user, &user, &reason);
+
+    let correlation_id = sqlx::types::Uuid::new_v4();
+    let author_user_id = author.user.id;
+    let target_user_id = user.id;
+    let target_mention = user.mention();
+
+    silverpelt::ar_event::AntiraidEvent::ModerationStart(
+        silverpelt::ar_event::ModerationStartEventData {
+            correlation_id,
+            reason: Some(reason.clone()),
+            action: silverpelt::ar_event::ModerationAction::Unban { user },
+            author: match author {
+                std::borrow::Cow::Borrowed(member) => member.clone(),
+                std::borrow::Cow::Owned(member) => member,
+            },
+            num_stings: stings,
+        },
+    )
     .dispatch_to_template_worker_and_wait(&data, guild_id, Duration::from_secs(1))
     .await?;
 
@@ -911,7 +935,7 @@ async fn unban(
         .description(format!(
             "{} | Unbanning {}",
             get_icon_of_state("pending"),
-            user.mention()
+            target_mention
         ));
 
     let mut base_message = ctx
@@ -932,8 +956,8 @@ async fn unban(
                 reason: Some(reason.clone()),
                 void_reason: None,
                 guild_id,
-                creator: silverpelt::stings::StingTarget::User(author.user.id),
-                target: silverpelt::stings::StingTarget::User(user.id),
+                creator: silverpelt::stings::StingTarget::User(author_user_id),
+                target: silverpelt::stings::StingTarget::User(target_user_id),
                 state: silverpelt::stings::StingState::Active,
                 duration: None,
                 sting_data: None,
@@ -944,28 +968,10 @@ async fn unban(
     }
 
     ctx.http()
-        .remove_ban(
-            guild_id,
-            user.id,
-            Some(&to_log_format(&author.user, &user, &reason)),
-        )
+        .remove_ban(guild_id, target_user_id, Some(&unban_log_msg))
         .await?;
 
     tx.commit().await?;
-
-    silverpelt::ar_event::AntiraidEvent::Custom(silverpelt::ar_event::CustomEvent {
-        event_name: "AR/UnbanMember/End".to_string(),
-        event_titlename: "(Anti-Raid) Unban Member (Post-Warning)".to_string(),
-        event_data: serde_json::json!({
-            "target": user,
-            "moderator": author,
-            "reason": reason,
-            "stings": stings,
-            "log": to_log_format(&author.user, &user, &reason),
-        }),
-    })
-    .dispatch_to_template_worker_and_wait(&data, guild_id, Duration::from_secs(1))
-    .await?;
 
     if let Some(sting_dispatch) = sting_dispatch {
         sting_dispatch
@@ -973,12 +979,18 @@ async fn unban(
             .await?;
     };
 
+    silverpelt::ar_event::AntiraidEvent::ModerationEnd(
+        silverpelt::ar_event::ModerationEndEventData { correlation_id },
+    )
+    .dispatch_to_template_worker_and_nowait(&data, guild_id)
+    .await?;
+
     embed = CreateEmbed::new()
         .title("Unbanning Member...")
         .description(format!(
             "{} | Unbanned {}",
             get_icon_of_state("completed"),
-            user.mention()
+            target_mention
         ));
 
     base_message
@@ -997,7 +1009,7 @@ async fn unban(
 )]
 async fn timeout(
     ctx: Context<'_>,
-    #[description = "The member to timeout"] mut member: serenity::all::Member,
+    #[description = "The member to timeout"] member: serenity::all::Member,
     #[description = "The duration of the timeout"] duration: String,
     #[description = "The reason for the timeout"]
     #[max_length = 384]
@@ -1040,35 +1052,47 @@ async fn timeout(
         return Err("Stings must be greater than or equal to 0".into());
     }
 
-    // Check user hierarchy before performing moderative actions
-    check_hierarchy(&ctx, member.user.id).await?;
-
     // Dispatch event to modules, erroring out if the dispatch errors (e.g. limits hit due to a lua template etc)
     let Some(author) = ctx.author_member().await else {
         return Err("This command can only be used in a guild".into());
     };
 
-    silverpelt::ar_event::AntiraidEvent::Custom(silverpelt::ar_event::CustomEvent {
-        event_name: "AR/TimeoutMember/Start".to_string(),
-        event_titlename: "(Anti-Raid) Timeout Member (Pre-Warning)".to_string(),
-        event_data: serde_json::json!({
-            "target": member,
-            "moderator": author.user,
-            "reason": reason,
-            "stings": stings,
-            "log": to_log_format(&author.user, &member.user, &reason),
-            "duration": (duration.0 * duration.1.to_seconds()),
-        }),
-    })
+    let timeout_log_msg = to_log_format(&author.user, &member.user, &reason);
+
+    let correlation_id = sqlx::types::Uuid::new_v4();
+    let author_user_id = author.user.id;
+    let target_user_id = member.user.id;
+    let target_mention = member.user.mention();
+
+    let results = silverpelt::ar_event::AntiraidEvent::ModerationStart(
+        silverpelt::ar_event::ModerationStartEventData {
+            correlation_id,
+            reason: Some(reason.clone()),
+            action: silverpelt::ar_event::ModerationAction::Timeout {
+                member,
+                duration: (duration.0 * duration.1.to_seconds()),
+            },
+            author: match author {
+                std::borrow::Cow::Borrowed(member) => member.clone(),
+                std::borrow::Cow::Owned(member) => member,
+            },
+            num_stings: stings,
+        },
+    )
     .dispatch_to_template_worker_and_wait(&data, guild_id, Duration::from_secs(1))
     .await?;
+
+    if !results.can_execute() {
+        // Fallback to simple hierarchy check
+        check_hierarchy(&ctx, target_user_id).await?;
+    }
 
     let mut embed = CreateEmbed::new()
         .title("Timing out Member...")
         .description(format!(
             "{} | Timing out {}",
             get_icon_of_state("pending"),
-            member.mention()
+            target_mention
         ));
 
     let mut base_message = ctx
@@ -1089,8 +1113,8 @@ async fn timeout(
                 reason: Some(reason.clone()),
                 void_reason: None,
                 guild_id,
-                creator: silverpelt::stings::StingTarget::User(author.user.id),
-                target: silverpelt::stings::StingTarget::User(member.user.id),
+                creator: silverpelt::stings::StingTarget::User(author_user_id),
+                target: silverpelt::stings::StingTarget::User(target_user_id),
                 state: silverpelt::stings::StingState::Active,
                 duration: Some(std::time::Duration::from_secs(
                     duration.0 * duration.1.to_seconds(),
@@ -1104,30 +1128,31 @@ async fn timeout(
 
     // Create new punishment
     let p = silverpelt::punishments::PunishmentCreate {
-        module: "moderation".to_string(),
         src: Some("timeout".to_string()),
         guild_id,
         punishment: "timeout".to_string(),
-        creator: silverpelt::punishments::PunishmentTarget::User(author.user.id),
-        target: silverpelt::punishments::PunishmentTarget::User(member.user.id),
+        creator: silverpelt::punishments::PunishmentTarget::User(author_user_id),
+        target: silverpelt::punishments::PunishmentTarget::User(target_user_id),
         handle_log: serde_json::json!({}),
         duration: Some(std::time::Duration::from_secs(
             duration.0 * duration.1.to_seconds(),
         )),
         reason: reason.clone(),
         data: None,
+        state: PunishmentState::Active,
     }
     .create_without_dispatch(&mut *tx)
     .await?;
 
-    member
-        .edit(
+    guild_id
+        .edit_member(
             ctx.http(),
+            target_user_id,
             EditMember::new()
                 .disable_communication_until(Timestamp::from_millis(
                     Timestamp::now().unix_timestamp() * 1000 + time,
                 )?)
-                .audit_log_reason(&to_log_format(&author.user, &member.user, &reason)),
+                .audit_log_reason(&timeout_log_msg),
         )
         .await?;
 
@@ -1140,19 +1165,10 @@ async fn timeout(
             .await?;
     };
 
-    silverpelt::ar_event::AntiraidEvent::Custom(silverpelt::ar_event::CustomEvent {
-        event_name: "AR/TimeoutMember/End".to_string(),
-        event_titlename: "(Anti-Raid) Timeout Member (Post-Warning)".to_string(),
-        event_data: serde_json::json!({
-            "target": member,
-            "moderator": author,
-            "reason": reason,
-            "stings": stings,
-            "log": to_log_format(&author.user, &member.user, &reason),
-            "duration": (duration.0 * duration.1.to_seconds()),
-        }),
-    })
-    .dispatch_to_template_worker_and_wait(&data, guild_id, Duration::from_secs(1))
+    silverpelt::ar_event::AntiraidEvent::ModerationEnd(
+        silverpelt::ar_event::ModerationEndEventData { correlation_id },
+    )
+    .dispatch_to_template_worker_and_nowait(&data, guild_id)
     .await?;
 
     embed = CreateEmbed::new()
@@ -1160,7 +1176,7 @@ async fn timeout(
         .description(format!(
             "{} | Timing out {}",
             get_icon_of_state("completed"),
-            member.mention()
+            target_mention
         ));
 
     base_message

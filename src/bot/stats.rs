@@ -7,7 +7,18 @@ use sqlx::types::chrono;
 
 #[poise::command(category = "Stats", slash_command, user_cooldown = 1)]
 pub async fn stats(ctx: Context<'_>) -> Result<(), Error> {
-    let total_guilds = ctx.cache().guild_count();
+    let total_cached_guilds = ctx.cache().guild_count();
+
+    let total_guilds = {
+        let sandwich_resp = sandwich_driver::get_status(&ctx.data().reqwest).await?;
+
+        let mut guild_count = 0;
+        sandwich_resp.shard_conns.iter().for_each(|(_, sc)| {
+            guild_count += sc.guilds;
+        });
+
+        guild_count
+    };
 
     let total_users = {
         let mut count = 0;
@@ -55,7 +66,8 @@ pub async fn stats(ctx: Context<'_>) -> Result<(), Error> {
                 },
                 true,
             )
-            .field("Servers", total_guilds.to_string(), true)
+            .field("Cached Servers", total_cached_guilds.to_string(), true)
+            .field("Total Servers", total_guilds.to_string(), true)
             .field("Users", total_users.to_string(), true)
             .field("Commit Message", GIT_COMMIT_MSG, true)
             .field("Built On", BUILD_CPU, true)

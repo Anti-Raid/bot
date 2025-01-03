@@ -36,49 +36,49 @@ pub fn raw_commands() -> Vec<(
         ),
         (
             moderation::moderation(),
-            |command, _user_id, native_perms, kittycat_perms| {
-                if native_perms.administrator() {
+            |command, _user_id, user_info| {
+                if user_info.discord_permissions.administrator() {
                     return Ok(());
                 }
 
                 match command {
                         "moderation prune" => {
-                            if !native_perms.contains(serenity::model::permissions::Permissions::MANAGE_MESSAGES) && !kittycat::perms::has_perm(&kittycat_perms, &"moderation.prune".to_string().into()) {
+                            if !user_info.discord_permissions.contains(serenity::model::permissions::Permissions::MANAGE_MESSAGES) && !kittycat::perms::has_perm(&user_info.kittycat_resolved_permissions, &"moderation.prune".to_string().into()) {
                                 return Err("Missing required permission: MANAGE_MESSAGES or moderation.prune".into());
                             }
 
                             Ok(())
                         },
                         "moderation kick" => {
-                            if !native_perms.contains(serenity::model::permissions::Permissions::KICK_MEMBERS) && !kittycat::perms::has_perm(&kittycat_perms, &"moderation.kick".to_string().into()) {
+                            if !user_info.discord_permissions.contains(serenity::model::permissions::Permissions::KICK_MEMBERS) && !kittycat::perms::has_perm(&user_info.kittycat_resolved_permissions, &"moderation.kick".to_string().into()) {
                                 return Err("Missing required permission: KICK_MEMBERS or moderation.kick".into());
                             }
 
                             Ok(())
                         },
                         "moderation ban" => {
-                            if !native_perms.contains(serenity::model::permissions::Permissions::BAN_MEMBERS) && !kittycat::perms::has_perm(&kittycat_perms, &"moderation.ban".to_string().into()) {
+                            if !user_info.discord_permissions.contains(serenity::model::permissions::Permissions::BAN_MEMBERS) && !kittycat::perms::has_perm(&user_info.kittycat_resolved_permissions, &"moderation.ban".to_string().into()) {
                                 return Err("Missing required permission: BAN_MEMBERS or moderation.ban".into());
                             }
 
                             Ok(())
                         },
                         "moderation tempban" => {
-                            if !native_perms.contains(serenity::model::permissions::Permissions::BAN_MEMBERS) && !kittycat::perms::has_perm(&kittycat_perms, &"moderation.tempban".to_string().into()) {
+                            if !user_info.discord_permissions.contains(serenity::model::permissions::Permissions::BAN_MEMBERS) && !kittycat::perms::has_perm(&user_info.kittycat_resolved_permissions, &"moderation.tempban".to_string().into()) {
                                 return Err("Missing required permission: BAN_MEMBERS or moderation.tempban".into());
                             }
 
                             Ok(())
                         },
                         "moderation unban" => {
-                            if !native_perms.contains(serenity::model::permissions::Permissions::BAN_MEMBERS) && !kittycat::perms::has_perm(&kittycat_perms, &"moderation.unban".to_string().into()) {
+                            if !user_info.discord_permissions.contains(serenity::model::permissions::Permissions::BAN_MEMBERS) && !kittycat::perms::has_perm(&user_info.kittycat_resolved_permissions, &"moderation.unban".to_string().into()) {
                                 return Err("Missing required permission: BAN_MEMBERS or moderation.unban".into());
                             }
 
                             Ok(())
                         },
                         "moderation timeout" => {
-                            if !native_perms.contains(serenity::model::permissions::Permissions::MODERATE_MEMBERS) && !kittycat::perms::has_perm(&kittycat_perms, &"moderation.timeout".to_string().into()) {
+                            if !user_info.discord_permissions.contains(serenity::model::permissions::Permissions::MODERATE_MEMBERS) && !kittycat::perms::has_perm(&user_info.kittycat_resolved_permissions, &"moderation.timeout".to_string().into()) {
                                 return Err("Missing required permission: MODERATE_MEMBERS or moderation.timeout".into());
                             }
 
@@ -98,45 +98,45 @@ pub fn raw_commands() -> Vec<(
         ),
         (
             lockdowns::lockdowns(),
-            |command, _user_id, native_perms, kittycat_perms| {
+            |command, _user_id, user_info| {
                 match command {
                     "lockdowns list" => {
-                        if !native_perms.contains(serenity::model::permissions::Permissions::MANAGE_GUILD) && !kittycat::perms::has_perm(&kittycat_perms, &"lockdowns.list".to_string().into()) {
+                        if !user_info.discord_permissions.contains(serenity::model::permissions::Permissions::MANAGE_GUILD) && !kittycat::perms::has_perm(&user_info.kittycat_resolved_permissions, &"lockdowns.list".to_string().into()) {
                             return Err("Missing required permission: MANAGE_GUILD or lockdowns.list".into());
                         }
 
                         Ok(())
                     },
                     "lockdowns tsl" => {
-                        if !kittycat::perms::has_perm(&kittycat_perms, &"lockdowns.tsl".to_string().into()) {
+                        if !kittycat::perms::has_perm(&user_info.kittycat_resolved_permissions, &"lockdowns.tsl".to_string().into()) {
                             return Err("Missing required permission: lockdowns.tsl".into());
                         }
 
                         Ok(())
                     },
                     "lockdowns qsl" => {
-                        if !kittycat::perms::has_perm(&kittycat_perms, &"lockdowns.qsl".to_string().into()) {
+                        if !kittycat::perms::has_perm(&user_info.kittycat_resolved_permissions, &"lockdowns.qsl".to_string().into()) {
                             return Err("Missing required permission: lockdowns.qsl".into());
                         }
 
                         Ok(())
                     },
                     "lockdowns scl" => {
-                        if !kittycat::perms::has_perm(&kittycat_perms, &"lockdowns.scl".to_string().into()) {
+                        if !kittycat::perms::has_perm(&user_info.kittycat_resolved_permissions, &"lockdowns.scl".to_string().into()) {
                             return Err("Missing required permission: lockdowns.scl".into());
                         }
 
                         Ok(())
                     },
                     "lockdowns role" => {
-                        if !kittycat::perms::has_perm(&kittycat_perms, &"lockdowns.role".to_string().into()) {
+                        if !kittycat::perms::has_perm(&user_info.kittycat_resolved_permissions, &"lockdowns.role".to_string().into()) {
                             return Err("Missing required permission: lockdowns.role".into());
                         }
 
                         Ok(())
                     },
                     "lockdowns remove" => {
-                        if !kittycat::perms::has_perm(&kittycat_perms, &"lockdowns.remove".to_string().into()) {
+                        if !kittycat::perms::has_perm(&user_info.kittycat_resolved_permissions, &"lockdowns.remove".to_string().into()) {
                             return Err("Missing required permission: lockdowns.remove".into());
                         }
 
@@ -156,31 +156,31 @@ pub fn raw_commands() -> Vec<(
         ),
         (
             backups::backups(),
-            |command, _user_id, native_perms, kittycat_perms| {
+            |command, _user_id, user_info| {
                 match command {
                     "backups create" => {
-                        if !native_perms.contains(serenity::model::permissions::Permissions::MANAGE_GUILD) && !kittycat::perms::has_perm(&kittycat_perms, &"backups.create".to_string().into()) {
+                        if !user_info.discord_permissions.contains(serenity::model::permissions::Permissions::MANAGE_GUILD) && !kittycat::perms::has_perm(&user_info.kittycat_resolved_permissions, &"backups.create".to_string().into()) {
                             return Err("Missing required permission: MANAGE_GUILD or backups.create".into());
                         }
 
                         Ok(())
                     },
                     "backups list" => {
-                        if !native_perms.contains(serenity::model::permissions::Permissions::MANAGE_GUILD) && !kittycat::perms::has_perm(&kittycat_perms, &"backups.list".to_string().into()) {
+                        if !user_info.discord_permissions.contains(serenity::model::permissions::Permissions::MANAGE_GUILD) && !kittycat::perms::has_perm(&user_info.kittycat_resolved_permissions, &"backups.list".to_string().into()) {
                             return Err("Missing required permission: MANAGE_GUILD or backups.list".into());
                         }
 
                         Ok(())
                     },
                     "backups delete" => {
-                        if !native_perms.contains(serenity::model::permissions::Permissions::MANAGE_GUILD) && !kittycat::perms::has_perm(&kittycat_perms, &"backups.delete".to_string().into()) {
+                        if !user_info.discord_permissions.contains(serenity::model::permissions::Permissions::MANAGE_GUILD) && !kittycat::perms::has_perm(&user_info.kittycat_resolved_permissions, &"backups.delete".to_string().into()) {
                             return Err("Missing required permission: MANAGE_GUILD or backups.delete".into());
                         }
 
                         Ok(())
                     },
                     "backups restore" => {
-                        if !native_perms.contains(serenity::model::permissions::Permissions::ADMINISTRATOR) && !kittycat::perms::has_perm(&kittycat_perms, &"backups.restore".to_string().into()) {
+                        if !user_info.discord_permissions.contains(serenity::model::permissions::Permissions::ADMINISTRATOR) && !kittycat::perms::has_perm(&user_info.kittycat_resolved_permissions, &"backups.restore".to_string().into()) {
                             return Err("Missing required permission: ADMINISTRATOR or backups.restore".into());
                         }
 
@@ -198,10 +198,10 @@ pub fn raw_commands() -> Vec<(
         ),
         (
             load::load(),
-            |command, _user_id, native_perms, kittycat_perms| {
+            |command, _user_id, user_info| {
                 match command {
                     "load" => {
-                        if !native_perms.contains(serenity::model::permissions::Permissions::MANAGE_GUILD) && !kittycat::perms::has_perm(&kittycat_perms, &"bot.load".to_string().into()) {
+                        if !user_info.discord_permissions.contains(serenity::model::permissions::Permissions::MANAGE_GUILD) && !kittycat::perms::has_perm(&user_info.kittycat_resolved_permissions, &"bot.load".to_string().into()) {
                             return Err("Missing required permission: MANAGE_GUILD or bot.load".into());
                         }
 

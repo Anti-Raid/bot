@@ -241,7 +241,7 @@ async fn check_user_has_permission(
         &serenity_context,
         &data.reqwest,
         &None,
-        &kittycat::perms::Permission::from_string(&perms.perm),
+        kittycat::perms::Permission::from_string(&perms.perm),
     )
     .await;
 

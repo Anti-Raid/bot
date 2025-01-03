@@ -12,7 +12,7 @@ use async_trait::async_trait;
 
 async fn check_perms(
     ctx: &HookContext<'_>,
-    perm: &kittycat::perms::Permission,
+    perm: kittycat::perms::Permission,
 ) -> Result<(), SettingsError> {
     crate::botlib::permission_checks::member_has_kittycat_perm(
         ctx.guild_id,
@@ -152,7 +152,7 @@ impl SettingCreator for GuildRolesExecutor {
         ctx: HookContext<'a>,
         entry: indexmap::IndexMap<String, splashcore_rs::value::Value>,
     ) -> Result<indexmap::IndexMap<String, splashcore_rs::value::Value>, SettingsError> {
-        check_perms(&ctx, &"guild_roles.create".into()).await?;
+        check_perms(&ctx, "guild_roles.create".into()).await?;
 
         let res = self
             .base_verify_checks(&ctx, &entry, OperationType::Create)
@@ -223,7 +223,7 @@ impl SettingUpdater for GuildRolesExecutor {
         ctx: HookContext<'a>,
         entry: indexmap::IndexMap<String, splashcore_rs::value::Value>,
     ) -> Result<indexmap::IndexMap<String, splashcore_rs::value::Value>, SettingsError> {
-        check_perms(&ctx, &"guild_roles.update".into()).await?;
+        check_perms(&ctx, "guild_roles.update".into()).await?;
 
         let res = self
             .base_verify_checks(&ctx, &entry, OperationType::Update)
@@ -257,7 +257,7 @@ impl SettingDeleter for GuildRolesExecutor {
         ctx: HookContext<'a>,
         primary_key: splashcore_rs::value::Value,
     ) -> Result<(), SettingsError> {
-        check_perms(&ctx, &"guild_roles.delete".into()).await?;
+        check_perms(&ctx, "guild_roles.delete".into()).await?;
 
         let Some(row) = sqlx::query!("SELECT role_id, perms, index, display_name FROM guild_roles WHERE guild_id = $1 AND role_id = $2", ctx.guild_id.to_string(), primary_key.to_string())
         .fetch_optional(&ctx.data.data.pool)
@@ -580,7 +580,8 @@ impl GuildRolesExecutor {
             message: format!("Failed to get author permissions: {:?}", e),
             src: "NativeAction->index".to_string(),
             typ: "internal".to_string(),
-        })?;
+        })?
+        .resolve();
 
         if new_index < lowest_index {
             return Err(SettingsError::Generic {
@@ -781,7 +782,8 @@ impl GuildMembersExecutor {
             message: format!("Failed to get user permissions: {:?} ({})", e, user_id),
             src: "GuildMembersExecutor".to_string(),
             typ: "internal".to_string(),
-        })?;
+        })?
+        .resolve();
 
         let roles = member
             .roles
@@ -977,12 +979,11 @@ impl GuildMembersExecutor {
                     typ: "internal".to_string(),
                 })?;
 
-            silverpelt::member_permission_calc::rederive_perms_impl(
-                ctx.guild_id,
-                user_id,
+            kittycat::perms::StaffPermissions {
                 user_positions,
-                perm_overrides.clone(),
-            )
+                perm_overrides: perm_overrides.clone(),
+            }
+            .resolve()
         };
 
         // Check permissions
@@ -1085,7 +1086,7 @@ impl SettingCreator for GuildMembersExecutor {
         ctx: HookContext<'a>,
         entry: indexmap::IndexMap<String, splashcore_rs::value::Value>,
     ) -> Result<indexmap::IndexMap<String, splashcore_rs::value::Value>, SettingsError> {
-        check_perms(&ctx, &"guild_members.create".into()).await?;
+        check_perms(&ctx, "guild_members.create".into()).await?;
 
         let res = self.verify(&ctx, &entry, OperationType::Create).await?;
 
@@ -1138,7 +1139,7 @@ impl SettingUpdater for GuildMembersExecutor {
         ctx: HookContext<'a>,
         entry: indexmap::IndexMap<String, splashcore_rs::value::Value>,
     ) -> Result<indexmap::IndexMap<String, splashcore_rs::value::Value>, SettingsError> {
-        check_perms(&ctx, &"guild_members.update".into()).await?;
+        check_perms(&ctx, "guild_members.update".into()).await?;
 
         let res = self.verify(&ctx, &entry, OperationType::Update).await?;
 
@@ -1168,7 +1169,7 @@ impl SettingDeleter for GuildMembersExecutor {
         ctx: HookContext<'a>,
         primary_key: splashcore_rs::value::Value,
     ) -> Result<(), SettingsError> {
-        check_perms(&ctx, &"guild_members.delete".into()).await?;
+        check_perms(&ctx, "guild_members.delete".into()).await?;
 
         let Some(row) = sqlx::query!("SELECT user_id, perm_overrides, public FROM guild_members WHERE guild_id = $1 AND user_id = $2", ctx.guild_id.to_string(), primary_key.to_string())
         .fetch_optional(&ctx.data.data.pool)
@@ -1349,7 +1350,7 @@ impl SettingView for GuildTemplateExecutor {
     ) -> Result<Vec<indexmap::IndexMap<String, splashcore_rs::value::Value>>, SettingsError> {
         log::info!("Viewing guild templates for guild id: {}", context.guild_id);
 
-        check_perms(&context, &"guild_templates.view".into()).await?;
+        check_perms(&context, "guild_templates.view".into()).await?;
 
         let rows = sqlx::query!("SELECT name, content, events, error_channel, created_at, created_by, last_updated_at, last_updated_by FROM guild_templates WHERE guild_id = $1", context.guild_id.to_string())
         .fetch_all(&context.data.data.pool)
@@ -1395,7 +1396,7 @@ impl SettingCreator for GuildTemplateExecutor {
         ctx: HookContext<'a>,
         entry: indexmap::IndexMap<String, splashcore_rs::value::Value>,
     ) -> Result<indexmap::IndexMap<String, splashcore_rs::value::Value>, SettingsError> {
-        check_perms(&ctx, &"guild_templates.create".into()).await?;
+        check_perms(&ctx, "guild_templates.create".into()).await?;
 
         let Some(Value::String(name)) = entry.get("name") else {
             return Err(SettingsError::MissingOrInvalidField {
@@ -1492,7 +1493,7 @@ impl SettingUpdater for GuildTemplateExecutor {
         ctx: HookContext<'a>,
         entry: indexmap::IndexMap<String, splashcore_rs::value::Value>,
     ) -> Result<indexmap::IndexMap<String, splashcore_rs::value::Value>, SettingsError> {
-        check_perms(&ctx, &"guild_templates.update".into()).await?;
+        check_perms(&ctx, "guild_templates.update".into()).await?;
 
         let Some(Value::String(name)) = entry.get("name") else {
             return Err(SettingsError::MissingOrInvalidField {
@@ -1565,7 +1566,7 @@ impl SettingDeleter for GuildTemplateExecutor {
         ctx: HookContext<'a>,
         primary_key: splashcore_rs::value::Value,
     ) -> Result<(), SettingsError> {
-        check_perms(&ctx, &"guild_templates.delete".into()).await?;
+        check_perms(&ctx, "guild_templates.delete".into()).await?;
 
         let Some(row) = sqlx::query!(
             "SELECT name FROM guild_templates WHERE guild_id = $1 AND name = $2",
@@ -1657,7 +1658,7 @@ impl SettingView for GuildTemplatesKVExecutor {
         context: HookContext<'a>,
         _filters: indexmap::IndexMap<String, splashcore_rs::value::Value>,
     ) -> Result<Vec<indexmap::IndexMap<String, splashcore_rs::value::Value>>, SettingsError> {
-        check_perms(&context, &"guild_templates_kv.view".into()).await?;
+        check_perms(&context, "guild_templates_kv.view".into()).await?;
 
         let rows = sqlx::query!("SELECT key, value, created_at, last_updated_at FROM guild_templates_kv WHERE guild_id = $1", context.guild_id.to_string())
         .fetch_all(&context.data.data.pool)
@@ -1692,7 +1693,7 @@ impl SettingCreator for GuildTemplatesKVExecutor {
         ctx: HookContext<'a>,
         entry: indexmap::IndexMap<String, splashcore_rs::value::Value>,
     ) -> Result<indexmap::IndexMap<String, splashcore_rs::value::Value>, SettingsError> {
-        check_perms(&ctx, &"guild_templates_kv.create".into()).await?;
+        check_perms(&ctx, "guild_templates_kv.create".into()).await?;
 
         let Some(Value::String(key)) = entry.get("key") else {
             return Err(SettingsError::MissingOrInvalidField {
@@ -1787,7 +1788,7 @@ impl SettingUpdater for GuildTemplatesKVExecutor {
         ctx: HookContext<'a>,
         entry: indexmap::IndexMap<String, splashcore_rs::value::Value>,
     ) -> Result<indexmap::IndexMap<String, splashcore_rs::value::Value>, SettingsError> {
-        check_perms(&ctx, &"guild_templates_kv.update".into()).await?;
+        check_perms(&ctx, "guild_templates_kv.update".into()).await?;
 
         let Some(Value::String(key)) = entry.get("key") else {
             return Err(SettingsError::MissingOrInvalidField {
@@ -1828,7 +1829,7 @@ impl SettingDeleter for GuildTemplatesKVExecutor {
         ctx: HookContext<'a>,
         primary_key: splashcore_rs::value::Value,
     ) -> Result<(), SettingsError> {
-        check_perms(&ctx, &"guild_templates_kv.delete".into()).await?;
+        check_perms(&ctx, "guild_templates_kv.delete".into()).await?;
 
         if sqlx::query!(
             "SELECT COUNT(*) FROM guild_templates_kv WHERE guild_id = $1 AND key = $2",
@@ -1985,7 +1986,7 @@ pub static GUILD_TEMPLATE_SHOP: LazyLock<Setting> = LazyLock::new(|| {
                     kind: InnerColumnTypeStringKind::Normal {},
                     min_length: None,
                     max_length: None,
-                    allowed_values: vec!["hook".to_string(), "library".to_string()],
+                    allowed_values: vec!["public".to_string(), "hidden".to_string()],
                 }),
                 nullable: false,
                 suggestions: ColumnSuggestion::None {},
@@ -2013,7 +2014,7 @@ impl SettingView for GuildTemplateShopExecutor {
         context: HookContext<'a>,
         _filters: indexmap::IndexMap<String, splashcore_rs::value::Value>,
     ) -> Result<Vec<indexmap::IndexMap<String, splashcore_rs::value::Value>>, SettingsError> {
-        check_perms(&context, &"guild_templates_shop.view".into()).await?;
+        check_perms(&context, "guild_templates_shop.view".into()).await?;
 
         let rows = sqlx::query!("SELECT id, name, friendly_name, version, description, type, events, created_at, created_by, last_updated_at, last_updated_by FROM template_shop WHERE owner_guild = $1", context.guild_id.to_string())
         .fetch_all(&context.data.data.pool)
@@ -2058,7 +2059,7 @@ impl SettingCreator for GuildTemplateShopExecutor {
         ctx: HookContext<'a>,
         entry: indexmap::IndexMap<String, splashcore_rs::value::Value>,
     ) -> Result<indexmap::IndexMap<String, splashcore_rs::value::Value>, SettingsError> {
-        check_perms(&ctx, &"guild_templates_shop.create".into()).await?;
+        check_perms(&ctx, "guild_templates_shop.create".into()).await?;
 
         let Some(Value::String(name)) = entry.get("name") else {
             return Err(SettingsError::MissingOrInvalidField {
@@ -2145,6 +2146,14 @@ impl SettingCreator for GuildTemplateShopExecutor {
                 src: "GuildTemplateShopExecutor".to_string(),
             });
         };
+
+        if version == "latest" {
+            return Err(SettingsError::Generic {
+                message: "Version cannot be 'latest'".to_string(),
+                src: "GuildTemplateShopExecutor".to_string(),
+                typ: "external".to_string(),
+            });
+        }
 
         let count = sqlx::query!(
             "SELECT COUNT(*) FROM template_shop WHERE owner_guild = $1 AND name = $2 AND version = $3",
@@ -2245,7 +2254,7 @@ impl SettingUpdater for GuildTemplateShopExecutor {
         ctx: HookContext<'a>,
         entry: indexmap::IndexMap<String, splashcore_rs::value::Value>,
     ) -> Result<indexmap::IndexMap<String, splashcore_rs::value::Value>, SettingsError> {
-        check_perms(&ctx, &"guild_templates_shop.update".into()).await?;
+        check_perms(&ctx, "guild_templates_shop.update".into()).await?;
 
         let Some(Value::Uuid(id)) = entry.get("id") else {
             return Err(SettingsError::MissingOrInvalidField {
@@ -2324,7 +2333,7 @@ impl SettingDeleter for GuildTemplateShopExecutor {
         ctx: HookContext<'a>,
         primary_key: splashcore_rs::value::Value,
     ) -> Result<(), SettingsError> {
-        check_perms(&ctx, &"guild_templates_shop.delete".into()).await?;
+        check_perms(&ctx, "guild_templates_shop.delete".into()).await?;
 
         let primary_key = match primary_key {
             Value::Uuid(id) => id,
@@ -2465,7 +2474,7 @@ pub static GUILD_TEMPLATE_SHOP_PUBLIC_LIST: LazyLock<Setting> = LazyLock::new(||
                     kind: InnerColumnTypeStringKind::Normal {},
                     min_length: None,
                     max_length: None,
-                    allowed_values: vec!["hook".to_string(), "library".to_string()],
+                    allowed_values: vec!["public".to_string(), "hidden".to_string()],
                 }),
                 nullable: false,
                 suggestions: ColumnSuggestion::None {},
@@ -2493,7 +2502,7 @@ impl SettingView for GuildTemplateShopPublicListExecutor {
         context: HookContext<'a>,
         _filters: indexmap::IndexMap<String, splashcore_rs::value::Value>,
     ) -> Result<Vec<indexmap::IndexMap<String, splashcore_rs::value::Value>>, SettingsError> {
-        let rows = sqlx::query!("SELECT id, name, version, description, type, owner_guild, created_at, created_by, last_updated_at, last_updated_by FROM template_shop")
+        let rows = sqlx::query!("SELECT id, name, version, description, type, owner_guild, created_at, created_by, last_updated_at, last_updated_by FROM template_shop WHERE type = 'public'")
         .fetch_all(&context.data.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
@@ -2582,7 +2591,7 @@ impl SettingView for LockdownSettingsExecutor {
         context: HookContext<'a>,
         _filters: indexmap::IndexMap<String, splashcore_rs::value::Value>,
     ) -> Result<Vec<indexmap::IndexMap<String, splashcore_rs::value::Value>>, SettingsError> {
-        check_perms(&context, &"lockdown_settings.view".into()).await?;
+        check_perms(&context, "lockdown_settings.view".into()).await?;
 
         let rows = sqlx::query!("SELECT member_roles, require_correct_layout, created_at, created_by, last_updated_at, last_updated_by FROM lockdown__guilds WHERE guild_id = $1", context.guild_id.to_string())
             .fetch_all(&context.data.data.pool)
@@ -2620,7 +2629,7 @@ impl SettingCreator for LockdownSettingsExecutor {
         context: HookContext<'a>,
         entry: indexmap::IndexMap<String, splashcore_rs::value::Value>,
     ) -> Result<indexmap::IndexMap<String, splashcore_rs::value::Value>, SettingsError> {
-        check_perms(&context, &"lockdown_settings.create".into()).await?;
+        check_perms(&context, "lockdown_settings.create".into()).await?;
 
         let Some(splashcore_rs::value::Value::List(member_roles)) = entry.get("member_roles") else {
             return Err(SettingsError::MissingOrInvalidField {
@@ -2672,7 +2681,7 @@ impl SettingUpdater for LockdownSettingsExecutor {
         context: HookContext<'a>,
         entry: indexmap::IndexMap<String, splashcore_rs::value::Value>,
     ) -> Result<indexmap::IndexMap<String, splashcore_rs::value::Value>, SettingsError> {
-        check_perms(&context, &"lockdown_settings.uodate".into()).await?;
+        check_perms(&context, "lockdown_settings.uodate".into()).await?;
 
         let Some(splashcore_rs::value::Value::List(member_roles)) = entry.get("member_roles") else {
             return Err(SettingsError::MissingOrInvalidField {
@@ -2741,7 +2750,7 @@ impl SettingDeleter for LockdownSettingsExecutor {
         context: HookContext<'a>,
         _primary_key: splashcore_rs::value::Value,
     ) -> Result<(), SettingsError> {
-        check_perms(&context, &"lockdown_settings.delete".into()).await?;
+        check_perms(&context, "lockdown_settings.delete".into()).await?;
 
         sqlx::query!("DELETE FROM lockdown__guilds WHERE guild_id = $1", context.guild_id.to_string())
             .execute(&context.data.data.pool)
@@ -2833,7 +2842,7 @@ impl SettingView for LockdownExecutor {
         context: HookContext<'a>,
         _filters: indexmap::IndexMap<String, splashcore_rs::value::Value>,
     ) -> Result<Vec<indexmap::IndexMap<String, splashcore_rs::value::Value>>, SettingsError> {
-        check_perms(&context, &"lockdowns.view".into()).await?;
+        check_perms(&context, "lockdowns.view".into()).await?;
 
         let rows = sqlx::query!("SELECT id, data, type, reason, created_at FROM lockdown__guild_lockdowns WHERE guild_id = $1", context.guild_id.to_string())
             .fetch_all(&context.data.data.pool)
@@ -2870,7 +2879,7 @@ impl SettingCreator for LockdownExecutor {
         context: HookContext<'a>,
         entry: indexmap::IndexMap<String, splashcore_rs::value::Value>,
     ) -> Result<indexmap::IndexMap<String, splashcore_rs::value::Value>, SettingsError> {
-        check_perms(&context, &"lockdowns.create".into()).await?;
+        check_perms(&context, "lockdowns.create".into()).await?;
     
         let Some(splashcore_rs::value::Value::String(typ)) = entry.get("type") else {
             return Err(SettingsError::MissingOrInvalidField {
@@ -2954,7 +2963,7 @@ impl SettingDeleter for LockdownExecutor {
         context: HookContext<'a>,
         primary_key: splashcore_rs::value::Value,
     ) -> Result<(), SettingsError> {
-        check_perms(&context, &"lockdowns.delete".into()).await?;
+        check_perms(&context, "lockdowns.delete".into()).await?;
                 
         let primary_key = match primary_key {
             Value::Uuid(primary_key) => primary_key,

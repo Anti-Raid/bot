@@ -2,7 +2,6 @@ use std::num::NonZeroU16;
 
 use crate::{Context, Error};
 use poise::{serenity_prelude::CreateEmbed, CreateReply};
-use sandwich_driver::GetStatusResponse;
 use serenity::builder::EditMessage;
 
 #[poise::command(category = "Stats", slash_command, user_cooldown = 1)]
@@ -26,7 +25,7 @@ pub async fn ping(ctx: Context<'_>) -> Result<(), Error> {
     let new_st = std::time::Instant::now();
 
     let real_ws_latency = {
-        let sandwich_resp = get_sandwich_status(&ctx.data()).await?;
+        let sandwich_resp = sandwich_driver::get_status(&ctx.data().reqwest).await?;
         // Due to Sandwich Virtual Sharding etc, we need to reshard the guild id
         let sid = {
             if let Some(guild_id) = ctx.guild_id() {
@@ -78,12 +77,4 @@ pub async fn ping(ctx: Context<'_>) -> Result<(), Error> {
     .await?;
 
     Ok(())
-}
-
-pub async fn get_sandwich_status(
-    data: &silverpelt::data::Data,
-) -> Result<GetStatusResponse, silverpelt::Error> {
-    let status = sandwich_driver::get_status(&data.reqwest).await?;
-
-    Ok(status)
 }
