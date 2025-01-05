@@ -559,17 +559,7 @@ impl GuildRolesExecutor {
         }
 
         let author_kittycat_perms = silverpelt::member_permission_calc::get_kittycat_perms(
-            &mut *ctx
-                .data
-                .data
-                .pool
-                .acquire()
-                .await
-                .map_err(|e| SettingsError::Generic {
-                    message: format!("Failed to get pool: {:?}", e),
-                    src: "GuildMembersExecutor".to_string(),
-                    typ: "internal".to_string(),
-                })?,
+            &ctx.data.data.pool,
             ctx.guild_id,
             guild.owner_id,
             ctx.author,
@@ -748,7 +738,7 @@ impl GuildMembersExecutor {
     async fn get_kittycat_perms_for_user(
         &self,
         data: &SettingsData,
-        conn: &mut sqlx::PgConnection,
+        pool: &sqlx::PgPool,
         guild_id: serenity::all::GuildId,
         guild_owner_id: serenity::all::UserId,
         user_id: serenity::all::UserId,
@@ -771,7 +761,7 @@ impl GuildMembersExecutor {
         };
 
         let kittycat_perms = silverpelt::member_permission_calc::get_kittycat_perms(
-            &mut *conn,
+            pool,
             guild_id,
             guild_owner_id,
             user_id,
@@ -900,13 +890,7 @@ impl GuildMembersExecutor {
             match self
                 .get_kittycat_perms_for_user(
                     ctx.data,
-                    &mut *ctx.data.data.pool.acquire().await.map_err(|e| {
-                        SettingsError::Generic {
-                            message: format!("Failed to get pool: {:?}", e),
-                            src: "GuildMembersExecutor".to_string(),
-                            typ: "internal".to_string(),
-                        }
-                    })?,
+                    &ctx.data.data.pool,
                     ctx.guild_id,
                     guild.owner_id,
                     ctx.author,
@@ -928,13 +912,7 @@ impl GuildMembersExecutor {
             match self
                 .get_kittycat_perms_for_user(
                     ctx.data,
-                    &mut *ctx.data.data.pool.acquire().await.map_err(|e| {
-                        SettingsError::Generic {
-                            message: format!("Failed to get pool: {:?}", e),
-                            src: "GuildMembersExecutor".to_string(),
-                            typ: "internal".to_string(),
-                        }
-                    })?,
+                    &ctx.data.data.pool,
                     ctx.guild_id,
                     guild.owner_id,
                     user_id,
@@ -962,13 +940,7 @@ impl GuildMembersExecutor {
 
             let user_positions =
                 silverpelt::member_permission_calc::get_user_positions_from_db(
-                    &mut *ctx.data.data.pool.acquire().await.map_err(|e| {
-                        SettingsError::Generic {
-                            message: format!("Failed to get pool: {:?}", e),
-                            src: "GuildMembersExecutor".to_string(),
-                            typ: "internal".to_string(),
-                        }
-                    })?,
+                    &ctx.data.data.pool,
                     ctx.guild_id,
                     &roles_str,
                 )
