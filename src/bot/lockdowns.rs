@@ -23,23 +23,24 @@ pub async fn lockdowns_list(ctx: Context<'_>) -> Result<(), Error> {
         return Err("This command can only be used in a guild".into());
     };
 
-    let lockdowns = sqlx::query!(
-        "SELECT id, type, reason FROM lockdown__guild_lockdowns WHERE guild_id = $1",
-        guild_id.to_string()
-    )
-    .fetch_all(&ctx.data().pool)
-    .await?;
+    let data = ctx.data();
 
-    if lockdowns.is_empty() {
+    let lockdowns = lockdowns::LockdownSet::guild(guild_id, &data.pool)
+        .await
+        .map_err(|e| format!("Error while fetching lockdown set: {}", e))?;
+
+    if lockdowns.lockdowns.is_empty() {
         return Err("No active lockdowns".into());
     }
 
     let mut msg = String::new();
 
-    for lockdown in lockdowns {
+    for lockdown in lockdowns.lockdowns {
         msg.push_str(&format!(
             "ID: {}, Type: {}, Reason: {}\n",
-            lockdown.id, lockdown.r#type, lockdown.reason
+            lockdown.id,
+            lockdown.r#type.string_form(),
+            lockdown.reason
         ));
     }
 
@@ -77,7 +78,6 @@ pub async fn lockdowns_tsl(ctx: Context<'_>, reason: String) -> Result<(), Error
         http: ctx.http(),
         pool: data.pool.clone(),
         reqwest: data.reqwest.clone(),
-        object_store: data.object_store.clone(),
     };
 
     ctx.defer().await?;
@@ -114,7 +114,6 @@ pub async fn lockdowns_qsl(ctx: Context<'_>, reason: String) -> Result<(), Error
         http: ctx.http(),
         pool: data.pool.clone(),
         reqwest: data.reqwest.clone(),
-        object_store: data.object_store.clone(),
     };
 
     ctx.defer().await?;
@@ -156,7 +155,6 @@ pub async fn lockdowns_scl(
         http: ctx.http(),
         pool: data.pool.clone(),
         reqwest: data.reqwest.clone(),
-        object_store: data.object_store.clone(),
     };
 
     ctx.defer().await?;
@@ -197,7 +195,6 @@ pub async fn lockdowns_role(
         http: ctx.http(),
         pool: data.pool.clone(),
         reqwest: data.reqwest.clone(),
-        object_store: data.object_store.clone(),
     };
 
     ctx.defer().await?;
@@ -231,7 +228,6 @@ pub async fn lockdowns_remove(ctx: Context<'_>, id: String) -> Result<(), Error>
         http: ctx.http(),
         pool: data.pool.clone(),
         reqwest: data.reqwest.clone(),
-        object_store: data.object_store.clone(),
     };
 
     ctx.defer().await?;

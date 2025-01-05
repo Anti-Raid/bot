@@ -2902,7 +2902,6 @@ impl SettingCreator for LockdownExecutor {
             http: &context.data.serenity_context.http,
             pool: context.data.data.pool.clone(),
             reqwest: context.data.data.reqwest.clone(),
-            object_store: context.data.data.object_store.clone(),
         };
 
         lockdowns
@@ -2969,7 +2968,6 @@ impl SettingDeleter for LockdownExecutor {
             http: &context.data.serenity_context.http,
             pool: context.data.data.pool.clone(),
             reqwest: context.data.data.reqwest.clone(),
-            object_store: context.data.data.object_store.clone(),
         };        
 
         // Remove the lockdown
