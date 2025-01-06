@@ -1206,6 +1206,21 @@ pub static GUILD_TEMPLATES: LazyLock<Setting> = LazyLock::new(|| {
                 secret: false,
             },
             Column {
+                id: "language".to_string(),
+                name: "Language".to_string(),
+                description: "The language of the template. Only Roblox Luau is currently supported here.".to_string(),
+                column_type: ColumnType::new_scalar(InnerColumnType::String {
+                    kind: InnerColumnTypeStringKind::Normal {},
+                    min_length: None,
+                    max_length: Some(64),
+                    allowed_values: vec!["luau".to_string()],
+                }),
+                nullable: false,
+                suggestions: ColumnSuggestion::None {},
+                ignored_for: vec![],
+                secret: false,
+            },
+            Column {
                 id: "content".to_string(),
                 name: "Content".to_string(),
                 description: "The content of the template".to_string(),
@@ -1229,6 +1244,20 @@ pub static GUILD_TEMPLATES: LazyLock<Setting> = LazyLock::new(|| {
                 column_type: ColumnType::new_array(InnerColumnType::String { min_length: None, max_length: None, allowed_values: vec![], kind: InnerColumnTypeStringKind::Normal {} }),
                 nullable: true,
                 suggestions: ColumnSuggestion::Static { suggestions: gwevent::core::event_list().iter().copied().map(|x| x.to_string()).collect() },
+                ignored_for: vec![],
+                secret: false,
+            },
+            Column {
+                id: "allowed_caps".to_string(),
+                name: "Capabilities".to_string(),
+                description: "The capabilities the template will have.".to_string(),
+                column_type: ColumnType::new_array(InnerColumnType::String { min_length: None, max_length: None, allowed_values: vec![], kind: InnerColumnTypeStringKind::Normal {} }),
+                nullable: true,
+                suggestions: ColumnSuggestion::Static {
+                    suggestions: vec![
+                        "discord:create_message".to_string()
+                    ]
+                },
                 ignored_for: vec![],
                 secret: false,
             },
@@ -1324,7 +1353,7 @@ impl SettingView for GuildTemplateExecutor {
 
         check_perms(&context, "guild_templates.view".into()).await?;
 
-        let rows = sqlx::query!("SELECT name, content, events, error_channel, created_at, created_by, last_updated_at, last_updated_by FROM guild_templates WHERE guild_id = $1", context.guild_id.to_string())
+        let rows = sqlx::query!("SELECT name, content, language, allowed_caps, events, error_channel, created_at, created_by, last_updated_at, last_updated_by FROM guild_templates WHERE guild_id = $1", context.guild_id.to_string())
         .fetch_all(&context.data.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
@@ -1339,6 +1368,10 @@ impl SettingView for GuildTemplateExecutor {
             let map = indexmap::indexmap! {
                 "name".to_string() => Value::String(row.name),
                 "content".to_string() => Value::String(row.content),
+                "language".to_string() => Value::String(row.language),
+                "allowed_caps".to_string() => {
+                    Value::List(row.allowed_caps.iter().map(|x| Value::String(x.to_string())).collect())
+                },
                 "events".to_string() => {
                     Value::List(row.events.iter().map(|x| Value::String(x.to_string())).collect())
                 },
@@ -1402,6 +1435,13 @@ impl SettingCreator for GuildTemplateExecutor {
 
         self.validate(&ctx, name).await?;
 
+        let Some(Value::String(language)) = entry.get("language") else {
+            return Err(SettingsError::MissingOrInvalidField {
+                field: "language".to_string(),
+                src: "GuildTemplateShopExecutor".to_string(),
+            });
+        };
+
         let Some(Value::String(content)) = entry.get("content") else {
             return Err(SettingsError::MissingOrInvalidField {
                 field: "content".to_string(),
@@ -1410,7 +1450,7 @@ impl SettingCreator for GuildTemplateExecutor {
         };
 
         let events = match entry.get("events") {
-            Some(Value::List(events)) => Some(
+            Some(Value::List(events)) => 
                 events
                     .iter()
                     .map(|x| {
@@ -1425,8 +1465,30 @@ impl SettingCreator for GuildTemplateExecutor {
                         }
                     })
                     .collect::<Result<Vec<String>, SettingsError>>()?,
-            ),
-            _ => None,
+            _ => {
+                vec![]
+            },
+        };
+
+        let allowed_caps = match entry.get("allowed_caps") {
+            Some(Value::List(events)) => 
+                events
+                    .iter()
+                    .map(|x| {
+                        if let Value::String(x) = x {
+                            Ok(x.to_string())
+                        } else {
+                            Err(SettingsError::Generic {
+                                message: "Failed to parse events".to_string(),
+                                src: "GuildTemplateExecutor".to_string(),
+                                typ: "internal".to_string(),
+                            })
+                        }
+                    })
+                    .collect::<Result<Vec<String>, SettingsError>>()?,
+            _ => {
+                vec![]
+            },
         };
 
         let error_channel = match entry.get("error_channel") {
@@ -1435,11 +1497,13 @@ impl SettingCreator for GuildTemplateExecutor {
         };
 
         sqlx::query!(
-            "INSERT INTO guild_templates (guild_id, name, content, events, error_channel, created_by, last_updated_by) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+            "INSERT INTO guild_templates (guild_id, name, language, content, events, allowed_caps, error_channel, created_by, last_updated_by) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
             ctx.guild_id.to_string(),
             name,
+            language,
             content,
-            events.as_deref(),
+            &events,
+            &allowed_caps,
             error_channel,
             ctx.author.to_string(),
             ctx.author.to_string()
@@ -1476,6 +1540,13 @@ impl SettingUpdater for GuildTemplateExecutor {
 
         self.validate(&ctx, name).await?;
 
+        let Some(Value::String(language)) = entry.get("language") else {
+            return Err(SettingsError::MissingOrInvalidField {
+                field: "language".to_string(),
+                src: "GuildTemplateShopExecutor".to_string(),
+            });
+        };
+
         let Some(Value::String(content)) = entry.get("content") else {
             return Err(SettingsError::MissingOrInvalidField {
                 field: "content".to_string(),
@@ -1484,7 +1555,7 @@ impl SettingUpdater for GuildTemplateExecutor {
         };
 
         let events = match entry.get("events") {
-            Some(Value::List(events)) => Some(
+            Some(Value::List(events)) => 
                 events
                     .iter()
                     .map(|x| {
@@ -1499,9 +1570,32 @@ impl SettingUpdater for GuildTemplateExecutor {
                         }
                     })
                     .collect::<Result<Vec<String>, SettingsError>>()?,
-            ),
-            _ => None,
+            _ => {
+                vec![]
+            },
         };
+
+        let allowed_caps = match entry.get("allowed_caps") {
+            Some(Value::List(events)) => 
+                events
+                    .iter()
+                    .map(|x| {
+                        if let Value::String(x) = x {
+                            Ok(x.to_string())
+                        } else {
+                            Err(SettingsError::Generic {
+                                message: "Failed to parse events".to_string(),
+                                src: "GuildTemplateExecutor".to_string(),
+                                typ: "internal".to_string(),
+                            })
+                        }
+                    })
+                    .collect::<Result<Vec<String>, SettingsError>>()?,
+            _ => {
+                vec![]
+            },
+        };
+        
 
         let error_channel = match entry.get("error_channel") {
             Some(Value::String(error_channel)) => Some(error_channel.to_string()),
@@ -1509,9 +1603,11 @@ impl SettingUpdater for GuildTemplateExecutor {
         };
 
         sqlx::query!(
-            "UPDATE guild_templates SET content = $1, events = $2, last_updated_at = NOW(), last_updated_by = $3, error_channel = $4 WHERE guild_id = $5 AND name = $6",
+            "UPDATE guild_templates SET content = $1, events = $2, allowed_caps = $3, language = $4, last_updated_at = NOW(), last_updated_by = $5, error_channel = $6 WHERE guild_id = $7 AND name = $8",
             content,
-            events.as_deref(),
+            &events,
+            &allowed_caps,
+            language,
             ctx.author.to_string(),
             error_channel,
             ctx.guild_id.to_string(),
@@ -1889,6 +1985,21 @@ pub static GUILD_TEMPLATE_SHOP: LazyLock<Setting> = LazyLock::new(|| {
                 secret: false,
             },
             Column {
+                id: "language".to_string(),
+                name: "Language".to_string(),
+                description: "The language of the template. Only Roblox Luau is currently supported here. Cannot be updated once set".to_string(),
+                column_type: ColumnType::new_scalar(InnerColumnType::String {
+                    kind: InnerColumnTypeStringKind::Normal {},
+                    min_length: None,
+                    max_length: Some(64),
+                    allowed_values: vec!["luau".to_string()],
+                }),
+                nullable: false,
+                suggestions: ColumnSuggestion::None {},
+                ignored_for: vec![OperationType::Update],
+                secret: false,
+            },
+            Column {
                 id: "version".to_string(),
                 name: "Version".to_string(),
                 description: "The version of the template. Cannot be updated once set".to_string(), 
@@ -1951,6 +2062,20 @@ pub static GUILD_TEMPLATE_SHOP: LazyLock<Setting> = LazyLock::new(|| {
                 secret: false,
             },
             Column {
+                id: "allowed_caps".to_string(),
+                name: "Capabilities".to_string(),
+                description: "The capabilities the template needs to perform its full functionality. Cannot be changed once set".to_string(),
+                column_type: ColumnType::new_array(InnerColumnType::String { min_length: None, max_length: None, allowed_values: vec![], kind: InnerColumnTypeStringKind::Normal {} }),
+                nullable: true,
+                suggestions: ColumnSuggestion::Static {
+                    suggestions: vec![
+                        "discord:create_message".to_string()
+                    ]
+                },
+                ignored_for: vec![OperationType::Update],
+                secret: false,
+            },
+            Column {
                 id: "type".to_string(),
                 name: "Type".to_string(),
                 description: "The type of the template".to_string(),
@@ -1988,7 +2113,7 @@ impl SettingView for GuildTemplateShopExecutor {
     ) -> Result<Vec<indexmap::IndexMap<String, splashcore_rs::value::Value>>, SettingsError> {
         check_perms(&context, "guild_templates_shop.view".into()).await?;
 
-        let rows = sqlx::query!("SELECT id, name, friendly_name, version, description, type, events, created_at, created_by, last_updated_at, last_updated_by FROM template_shop WHERE owner_guild = $1", context.guild_id.to_string())
+        let rows = sqlx::query!("SELECT id, name, friendly_name, language, allowed_caps, version, description, type, events, created_at, created_by, last_updated_at, last_updated_by FROM template_shop WHERE owner_guild = $1", context.guild_id.to_string())
         .fetch_all(&context.data.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
@@ -2004,6 +2129,10 @@ impl SettingView for GuildTemplateShopExecutor {
                 "id".to_string() => Value::String(row.id.to_string()),
                 "name".to_string() => Value::String(row.name),
                 "friendly_name".to_string() => Value::String(row.friendly_name),
+                "language".to_string() => Value::String(row.language),
+                "allowed_caps".to_string() => {
+                    Value::List(row.allowed_caps.iter().map(|x| Value::String(x.to_string())).collect())
+                },
                 "version".to_string() => Value::String(row.version),
                 "description".to_string() => Value::String(row.description),
                 "type".to_string() => Value::String(row.r#type),
@@ -2112,6 +2241,13 @@ impl SettingCreator for GuildTemplateShopExecutor {
             });
         };
 
+        let Some(Value::String(language)) = entry.get("language") else {
+            return Err(SettingsError::MissingOrInvalidField {
+                field: "language".to_string(),
+                src: "GuildTemplateShopExecutor".to_string(),
+            });
+        };
+
         let Some(Value::String(version)) = entry.get("version") else {
             return Err(SettingsError::MissingOrInvalidField {
                 field: "version".to_string(),
@@ -2190,10 +2326,29 @@ impl SettingCreator for GuildTemplateShopExecutor {
             _ => vec![],
         };
 
+        let allowed_caps = match entry.get("allowed_caps") {
+            Some(Value::List(events)) => events
+                .iter()
+                .map(|x| {
+                    if let Value::String(x) = x {
+                        Ok(x.to_string())
+                    } else {
+                        Err(SettingsError::Generic {
+                            message: "Failed to parse allowed caps".to_string(),
+                            src: "GuildTemplateShopExecutor".to_string(),
+                            typ: "internal".to_string(),
+                        })
+                    }
+                })
+                .collect::<Result<Vec<String>, SettingsError>>()?,
+            _ => vec![],
+        };
+
         let id = sqlx::query!(
-            "INSERT INTO template_shop (name, friendly_name, version, description, content, type, events, owner_guild, created_by, last_updated_by) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id",
+            "INSERT INTO template_shop (name, friendly_name, language, version, description, content, type, events, owner_guild, created_by, last_updated_by, allowed_caps) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id",
             name,
             friendly_name,
+            language,
             version,
             description,
             content,
@@ -2201,7 +2356,8 @@ impl SettingCreator for GuildTemplateShopExecutor {
             &events,
             ctx.guild_id.to_string(),
             ctx.author.to_string(),
-            ctx.author.to_string()
+            ctx.author.to_string(),
+            &allowed_caps
         )
         .fetch_one(&ctx.data.data.pool)
         .await

@@ -7,7 +7,7 @@ pub async fn load_autocomplete<'a>(
     let data = ctx.data();
 
     match sqlx::query!(
-        "SELECT name, friendly_name FROM template_shop WHERE name ILIKE $1 OR friendly_name ILIKE $1",
+        "SELECT id, name, friendly_name FROM template_shop WHERE name ILIKE $1 OR friendly_name ILIKE $1",
         format!("%{}%", partial.replace('%', "\\%").replace('_', "\\_")),
     )
     .fetch_all(&data.pool)
@@ -17,7 +17,7 @@ pub async fn load_autocomplete<'a>(
 
             for template in templates {
                 choices = choices.add_choice(serenity::all::AutocompleteChoice::new(
-                    template.friendly_name,
+                    format!("{} | {}", template.friendly_name, template.id),
                     template.name,
                 ));
             }
@@ -47,23 +47,29 @@ pub async fn load(
 
     let version = version.as_deref().unwrap_or("latest");
 
-    let (version, description, events) = {
+    let (version, description, events, language, allowed_caps) = {
         if version == "latest" {
             let rec = sqlx::query!(
-                "SELECT version, description, events FROM template_shop WHERE name = $1 ORDER BY version DESC LIMIT 1",
+                "SELECT version, description, events, language, allowed_caps FROM template_shop WHERE name = $1 ORDER BY version DESC LIMIT 1",
                 template_name,
             )
             .fetch_optional(&data.pool)
             .await?;
 
             if let Some(rec) = rec {
-                (rec.version, rec.description, rec.events)
+                (
+                    rec.version,
+                    rec.description,
+                    rec.events,
+                    rec.language,
+                    rec.allowed_caps,
+                )
             } else {
                 return Err("No template with that name found in the shop".into());
             }
         } else {
             let rec = sqlx::query!(
-                "SELECT version, description, events FROM template_shop WHERE name = $1 AND version = $2",
+                "SELECT version, description, events, language, allowed_caps FROM template_shop WHERE name = $1 AND version = $2",
                 template_name,
                 version,
             )
@@ -71,7 +77,13 @@ pub async fn load(
             .await?;
 
             if let Some(rec) = rec {
-                (rec.version, rec.description, rec.events)
+                (
+                    rec.version,
+                    rec.description,
+                    rec.events,
+                    rec.language,
+                    rec.allowed_caps,
+                )
             } else {
                 return Err("No template with that name and version found in the shop".into());
             }
@@ -86,8 +98,8 @@ pub async fn load(
                     CreateEmbed::default()
                         .title("Load Template?")
                         .description(format!(
-                            "Are you sure you want to load the template `{}`, version `{}`?",
-                            template_name, version
+                            "Are you sure you want to load the template `{}`, version `{}`, language `{}`?",
+                            template_name, version, language
                         ))
                         .field(
                             "Description",
@@ -97,7 +109,33 @@ pub async fn load(
                                 description
                             },
                             false,
-                        ),
+                        )
+                        .field(
+                            "Language",
+                            if language.len() > 300 {
+                                format!("{}...", &language[..300])
+                            } else {
+                                language
+                            },
+                            false,
+                        )
+                        .field("Events", {
+                            let events_str = events.join(", ");
+                            if events_str.len() > 300 {
+                                format!("{}...", &events_str[..300])
+                            } else {
+                                events_str
+                            }
+                        }, false)
+                        .field("Capabilities", {
+                            let allowed_caps_str = allowed_caps.join(", ");
+                            if allowed_caps_str.len() > 300 {
+                                format!("{}...", &allowed_caps_str[..300])
+                            } else {
+                                allowed_caps_str
+                            }
+                        }, false),
+
                 )
                 .components(vec![CreateActionRow::buttons(vec![
                     CreateButton::new("yes")
@@ -127,11 +165,12 @@ pub async fn load(
 
     // Add template to servers list of templates
     sqlx::query!(
-        "INSERT INTO guild_templates (guild_id, name, content, events, error_channel, created_by, last_updated_by) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+        "INSERT INTO guild_templates (guild_id, name, content, events, allowed_caps, error_channel, created_by, last_updated_by) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
         guild_id.to_string(),
         silverpelt::templates::create_shop_template(&template_name, &version),
         "".to_string(),
         &events,
+        &allowed_caps,
         match error_channel {
             Some(channel) => channel.id.to_string(),
             None => ctx.channel_id().to_string(),
