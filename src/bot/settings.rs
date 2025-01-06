@@ -1241,9 +1241,23 @@ pub static GUILD_TEMPLATES: LazyLock<Setting> = LazyLock::new(|| {
                 id: "events".to_string(),
                 name: "Events".to_string(),
                 description: "The events that this template can be dispatched on. If empty, this template is never dispatched.".to_string(),
-                column_type: ColumnType::new_array(InnerColumnType::String { min_length: None, max_length: None, allowed_values: vec![], kind: InnerColumnTypeStringKind::Normal {} }),
+                column_type: ColumnType::new_array(InnerColumnType::String { 
+                    min_length: None, 
+                    max_length: None, 
+                    allowed_values: {
+                        let mut vec = silverpelt::ar_event::AntiraidEvent::variant_names()
+                        .iter()
+                        .map(|x| x.to_string())
+                        .collect::<Vec<String>>();
+                        
+                        vec.extend(gwevent::core::event_list().iter().copied().map(|x| x.to_string()).collect::<Vec<String>>());
+
+                        vec
+                    },
+                    kind: InnerColumnTypeStringKind::Normal {} 
+                }),
                 nullable: true,
-                suggestions: ColumnSuggestion::Static { suggestions: gwevent::core::event_list().iter().copied().map(|x| x.to_string()).collect() },
+                suggestions: ColumnSuggestion::None {},
                 ignored_for: vec![],
                 secret: false,
             },
@@ -2054,7 +2068,16 @@ pub static GUILD_TEMPLATE_SHOP: LazyLock<Setting> = LazyLock::new(|| {
                     kind: InnerColumnTypeStringKind::Normal {},
                     min_length: None,
                     max_length: None,
-                    allowed_values: vec![],
+                    allowed_values: {
+                        let mut vec = silverpelt::ar_event::AntiraidEvent::variant_names()
+                        .iter()
+                        .map(|x| x.to_string())
+                        .collect::<Vec<String>>();
+                        
+                        vec.extend(gwevent::core::event_list().iter().copied().map(|x| x.to_string()).collect::<Vec<String>>());
+
+                        vec
+                    },
                 }),
                 nullable: false,
                 suggestions: ColumnSuggestion::None {},
