@@ -1,15 +1,15 @@
+use antiraid_types::userinfo::UserInfo;
+use serenity::all::{GuildId, UserId};
+use silverpelt::userinfo::UserInfoOperations;
+use sqlx::PgPool;
 use std::time::Duration;
 
-use serenity::all::{GuildId, UserId};
-use sqlx::PgPool;
-
-pub type PermissionCheck =
-    fn(&str, serenity::all::UserId, &silverpelt::userinfo::UserInfo) -> Result<(), crate::Error>;
+pub type PermissionCheck = fn(&str, serenity::all::UserId, &UserInfo) -> Result<(), crate::Error>;
 
 pub fn permission_check_none(
     _command: &str,
     _user_id: serenity::all::UserId,
-    _user_info: &silverpelt::userinfo::UserInfo,
+    _user_info: &UserInfo,
 ) -> Result<(), crate::Error> {
     Ok(())
 }
@@ -28,7 +28,7 @@ pub async fn check_command(
 ) -> Result<(), crate::Error> {
     let base_command = command.split(' ').next().unwrap_or_default();
 
-    let user_info = silverpelt::userinfo::UserInfo::get(
+    let user_info = UserInfo::get(
         guild_id,
         user_id,
         pool,
@@ -90,7 +90,7 @@ pub async fn member_has_kittycat_perm(
     poise_ctx: &Option<crate::Context<'_>>,
     perm: kittycat::perms::Permission,
 ) -> Result<(), crate::Error> {
-    let user_info = silverpelt::userinfo::UserInfo::get(
+    let user_info = UserInfo::get(
         guild_id,
         user_id,
         pool,

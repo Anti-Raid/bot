@@ -1380,6 +1380,7 @@ impl SettingView for GuildTemplateExecutor {
 
         for row in rows {
             let map = indexmap::indexmap! {
+                "guild_id".to_string() => Value::String(context.guild_id.to_string()),
                 "name".to_string() => Value::String(row.name),
                 "content".to_string() => Value::String(row.content),
                 "language".to_string() => Value::String(row.language),

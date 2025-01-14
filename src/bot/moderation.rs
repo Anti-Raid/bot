@@ -1,4 +1,8 @@
 use crate::Context;
+use antiraid_types::{
+    punishments::{PunishmentCreate, PunishmentState, PunishmentTarget},
+    stings::{StingCreate, StingState, StingTarget},
+};
 use futures_util::StreamExt;
 use jobserver::embed::{embed as embed_job, get_icon_of_state};
 use poise::CreateReply;
@@ -6,7 +10,11 @@ use sandwich_driver::{guild, member_in_guild};
 use serenity::all::{
     ChannelId, CreateEmbed, EditMember, EditMessage, GuildId, Mentionable, Timestamp, User, UserId,
 };
-use silverpelt::{punishments::PunishmentState, Error};
+use silverpelt::{
+    punishments::{PunishmentCreateOperations, PunishmentOperations},
+    stings::{StingCreateOperations, StingOperations},
+    Error,
+};
 use splashcore_rs::utils::{
     create_special_allocation_from_str, parse_duration_string, parse_numeric_list,
     parse_numeric_list_to_str, Unit, REPLACE_CHANNEL,
@@ -284,18 +292,18 @@ async fn prune(
 
     if stings > 0 {
         sting_dispatch = Some(
-            silverpelt::stings::StingCreate {
+            StingCreate {
                 src: Some("moderation:prune_user".to_string()),
                 stings,
                 reason: Some(reason),
                 void_reason: None,
                 guild_id,
-                creator: silverpelt::stings::StingTarget::User(author_user_id),
+                creator: StingTarget::User(author_user_id),
                 target: match target_user_id {
-                    Some(id) => silverpelt::stings::StingTarget::User(id),
-                    None => silverpelt::stings::StingTarget::System,
+                    Some(id) => StingTarget::User(id),
+                    None => StingTarget::System,
                 },
-                state: silverpelt::stings::StingState::Active,
+                state: StingState::Active,
                 duration: None,
                 sting_data: None,
             }
@@ -481,15 +489,15 @@ async fn kick(
 
     if stings > 0 {
         sting_dispatch = Some(
-            silverpelt::stings::StingCreate {
+            StingCreate {
                 src: Some("moderation:kick".to_string()),
                 stings,
                 reason: Some(reason.clone()),
                 void_reason: None,
                 guild_id,
-                creator: silverpelt::stings::StingTarget::User(author_user_id),
-                target: silverpelt::stings::StingTarget::User(target_user_id),
-                state: silverpelt::stings::StingState::Active,
+                creator: StingTarget::User(author_user_id),
+                target: StingTarget::User(target_user_id),
+                state: StingState::Active,
                 duration: None,
                 sting_data: None,
             }
@@ -499,12 +507,12 @@ async fn kick(
     }
 
     // Create new punishment
-    let p = silverpelt::punishments::PunishmentCreate {
+    let p = PunishmentCreate {
         src: Some("kick".to_string()),
         guild_id,
         punishment: "kick".to_string(),
-        creator: silverpelt::punishments::PunishmentTarget::User(author_user_id),
-        target: silverpelt::punishments::PunishmentTarget::User(target_user_id),
+        creator: PunishmentTarget::User(author_user_id),
+        target: PunishmentTarget::User(target_user_id),
         handle_log: serde_json::json!({}),
         duration: None,
         reason: reason.clone(),
@@ -639,15 +647,15 @@ async fn ban(
 
     if stings > 0 {
         sting_dispatch = Some(
-            silverpelt::stings::StingCreate {
+            StingCreate {
                 src: Some("moderation:ban".to_string()),
                 stings,
                 reason: Some(reason.clone()),
                 void_reason: None,
                 guild_id,
-                creator: silverpelt::stings::StingTarget::User(author_user_id),
-                target: silverpelt::stings::StingTarget::User(target_user_id),
-                state: silverpelt::stings::StingState::Active,
+                creator: StingTarget::User(author_user_id),
+                target: StingTarget::User(target_user_id),
+                state: StingState::Active,
                 duration: None,
                 sting_data: None,
             }
@@ -657,12 +665,12 @@ async fn ban(
     }
 
     // Create new punishment
-    let p = silverpelt::punishments::PunishmentCreate {
+    let p = PunishmentCreate {
         src: Some("ban".to_string()),
         guild_id,
         punishment: "ban".to_string(),
-        creator: silverpelt::punishments::PunishmentTarget::User(author_user_id),
-        target: silverpelt::punishments::PunishmentTarget::User(target_user_id),
+        creator: PunishmentTarget::User(author_user_id),
+        target: PunishmentTarget::User(target_user_id),
         handle_log: serde_json::json!({}),
         duration: None,
         reason: reason.clone(),
@@ -801,15 +809,15 @@ async fn tempban(
 
     if stings > 0 {
         sting_dispatch = Some(
-            silverpelt::stings::StingCreate {
+            StingCreate {
                 src: Some("moderation:tempban".to_string()),
                 stings,
                 reason: Some(reason.clone()),
                 void_reason: None,
                 guild_id,
-                creator: silverpelt::stings::StingTarget::User(author_user_id),
-                target: silverpelt::stings::StingTarget::User(target_user_id),
-                state: silverpelt::stings::StingState::Active,
+                creator: StingTarget::User(author_user_id),
+                target: StingTarget::User(target_user_id),
+                state: StingState::Active,
                 duration: Some(std::time::Duration::from_secs(
                     duration.0 * duration.1.to_seconds(),
                 )),
@@ -821,12 +829,12 @@ async fn tempban(
     }
 
     // Create new punishment
-    let p = silverpelt::punishments::PunishmentCreate {
+    let p = PunishmentCreate {
         src: Some("tempban".to_string()),
         guild_id,
         punishment: "ban".to_string(),
-        creator: silverpelt::punishments::PunishmentTarget::User(author_user_id),
-        target: silverpelt::punishments::PunishmentTarget::User(target_user_id),
+        creator: PunishmentTarget::User(author_user_id),
+        target: PunishmentTarget::User(target_user_id),
         handle_log: serde_json::json!({}),
         duration: Some(std::time::Duration::from_secs(
             duration.0 * duration.1.to_seconds(),
@@ -950,15 +958,15 @@ async fn unban(
 
     if stings > 0 {
         sting_dispatch = Some(
-            silverpelt::stings::StingCreate {
+            StingCreate {
                 src: Some("moderation:unban".to_string()),
                 stings,
                 reason: Some(reason.clone()),
                 void_reason: None,
                 guild_id,
-                creator: silverpelt::stings::StingTarget::User(author_user_id),
-                target: silverpelt::stings::StingTarget::User(target_user_id),
-                state: silverpelt::stings::StingState::Active,
+                creator: StingTarget::User(author_user_id),
+                target: StingTarget::User(target_user_id),
+                state: StingState::Active,
                 duration: None,
                 sting_data: None,
             }
@@ -1107,15 +1115,15 @@ async fn timeout(
 
     if stings > 0 {
         sting_dispatch = Some(
-            silverpelt::stings::StingCreate {
+            StingCreate {
                 src: Some("moderation:timeout".to_string()),
                 stings,
                 reason: Some(reason.clone()),
                 void_reason: None,
                 guild_id,
-                creator: silverpelt::stings::StingTarget::User(author_user_id),
-                target: silverpelt::stings::StingTarget::User(target_user_id),
-                state: silverpelt::stings::StingState::Active,
+                creator: StingTarget::User(author_user_id),
+                target: StingTarget::User(target_user_id),
+                state: StingState::Active,
                 duration: Some(std::time::Duration::from_secs(
                     duration.0 * duration.1.to_seconds(),
                 )),
@@ -1127,12 +1135,12 @@ async fn timeout(
     }
 
     // Create new punishment
-    let p = silverpelt::punishments::PunishmentCreate {
+    let p = PunishmentCreate {
         src: Some("timeout".to_string()),
         guild_id,
         punishment: "timeout".to_string(),
-        creator: silverpelt::punishments::PunishmentTarget::User(author_user_id),
-        target: silverpelt::punishments::PunishmentTarget::User(target_user_id),
+        creator: PunishmentTarget::User(author_user_id),
+        target: PunishmentTarget::User(target_user_id),
         handle_log: serde_json::json!({}),
         duration: Some(std::time::Duration::from_secs(
             duration.0 * duration.1.to_seconds(),
