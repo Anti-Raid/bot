@@ -1,25 +1,26 @@
 use ar_settings::types::{
-    settings_wrap, Column, ColumnSuggestion, ColumnType, HookContext, InnerColumnType,
-    InnerColumnTypeStringKind, OperationType, Setting, SettingOperations, SettingsError,
+    settings_wrap, Column, ColumnSuggestion, ColumnType, InnerColumnType,
+    OperationType, Setting, SettingOperations, SettingsError,
 };
 use ar_settings::types::{
-    SettingCreator, SettingDeleter, SettingUpdater, SettingView, SettingsData,
+    SettingCreator, SettingDeleter, SettingUpdater, SettingView,
 };
 use kittycat::perms::Permission;
-use splashcore_rs::value::Value;
+use ar_settings::value::Value;
 use std::sync::LazyLock;
 use async_trait::async_trait;
+use crate::botlib::settings::SettingsData;
 
 async fn check_perms(
-    ctx: &HookContext<'_>,
+    ctx: &SettingsData,
     perm: kittycat::perms::Permission,
 ) -> Result<(), SettingsError> {
     crate::botlib::permission_checks::member_has_kittycat_perm(
         ctx.guild_id,
         ctx.author,
-        &ctx.data.data.pool,
-        &ctx.data.serenity_context,
-        &ctx.data.data.reqwest,
+        &ctx.data.pool,
+        &ctx.serenity_context,
+        &ctx.data.reqwest,
         &None,
         perm,
     )
@@ -31,7 +32,7 @@ async fn check_perms(
     })
 }
 
-pub static GUILD_ROLES: LazyLock<Setting> = LazyLock::new(|| {
+pub static GUILD_ROLES: LazyLock<Setting<SettingsData>> = LazyLock::new(|| {
     Setting {
         id: "guild_roles".to_string(),
         name: "Server Roles".to_string(),
@@ -44,7 +45,7 @@ pub static GUILD_ROLES: LazyLock<Setting> = LazyLock::new(|| {
                 name: "Role ID".to_string(),
                 description: "The role ID".to_string(),
                 column_type: ColumnType::new_scalar(InnerColumnType::String {
-                    kind: InnerColumnTypeStringKind::Role {},
+                    kind: "role".to_string(),
                     min_length: None,
                     max_length: Some(64),
                     allowed_values: vec![],
@@ -59,7 +60,7 @@ pub static GUILD_ROLES: LazyLock<Setting> = LazyLock::new(|| {
                 name: "Permissions".to_string(),
                 description: "What permissions should the role have".to_string(),
                 column_type: ColumnType::new_array(InnerColumnType::String {
-                    kind: InnerColumnTypeStringKind::KittycatPermission {},
+                    kind: "kittycat".to_string(),
                     min_length: None,
                     max_length: Some(64),
                     allowed_values: vec![],
@@ -84,7 +85,7 @@ pub static GUILD_ROLES: LazyLock<Setting> = LazyLock::new(|| {
                 name: "Display Name".to_string(),
                 description: "What should the role be displayed as in API's etc".to_string(),
                 column_type: ColumnType::new_scalar(InnerColumnType::String {
-                    kind: InnerColumnTypeStringKind::KittycatPermission {},
+                    kind: "normal".to_string(),
                     min_length: None,
                     max_length: Some(64),
                     allowed_values: vec![],
@@ -100,7 +101,7 @@ pub static GUILD_ROLES: LazyLock<Setting> = LazyLock::new(|| {
             ar_settings::common_columns::last_updated_by(),
         ]),
         title_template: "{index} - {role_id}".to_string(),
-        operations: GuildRolesExecutor.into(),
+        operations: SettingOperations::from(GuildRolesExecutor),
     }
 });
 
@@ -108,14 +109,14 @@ pub static GUILD_ROLES: LazyLock<Setting> = LazyLock::new(|| {
 pub struct GuildRolesExecutor;
 
 #[async_trait::async_trait]
-impl SettingView for GuildRolesExecutor {
+impl SettingView<SettingsData> for GuildRolesExecutor {
     async fn view<'a>(
         &self,
-        context: HookContext<'a>,
-        _filters: indexmap::IndexMap<String, splashcore_rs::value::Value>,
-    ) -> Result<Vec<indexmap::IndexMap<String, splashcore_rs::value::Value>>, SettingsError> {
+        context: &SettingsData,
+        _filters: indexmap::IndexMap<String, Value>,
+    ) -> Result<Vec<indexmap::IndexMap<String, Value>>, SettingsError> {
         let rows = sqlx::query!("SELECT role_id, perms, index, display_name, created_at, created_by, last_updated_at, last_updated_by FROM guild_roles WHERE guild_id = $1", context.guild_id.to_string())
-        .fetch_all(&context.data.data.pool)
+        .fetch_all(&context.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Error while fetching guild roles: {}", e),
@@ -146,16 +147,16 @@ impl SettingView for GuildRolesExecutor {
 }
 
 #[async_trait::async_trait]
-impl SettingCreator for GuildRolesExecutor {
+impl SettingCreator<SettingsData> for GuildRolesExecutor {
     async fn create<'a>(
         &self,
-        ctx: HookContext<'a>,
-        entry: indexmap::IndexMap<String, splashcore_rs::value::Value>,
-    ) -> Result<indexmap::IndexMap<String, splashcore_rs::value::Value>, SettingsError> {
-        check_perms(&ctx, "guild_roles.create".into()).await?;
+        ctx: &SettingsData,
+        entry: indexmap::IndexMap<String, Value>,
+    ) -> Result<indexmap::IndexMap<String, Value>, SettingsError> {
+        check_perms(ctx, "guild_roles.create".into()).await?;
 
         let res = self
-            .base_verify_checks(&ctx, &entry, OperationType::Create)
+            .base_verify_checks(ctx, &entry, OperationType::Create)
             .await?;
 
         let count = sqlx::query!(
@@ -163,7 +164,7 @@ impl SettingCreator for GuildRolesExecutor {
             ctx.guild_id.to_string(),
             res.role_id.to_string()
         )
-        .fetch_one(&ctx.data.data.pool)
+        .fetch_one(&ctx.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Failed to check if role exists: {:?}", e),
@@ -191,7 +192,7 @@ impl SettingCreator for GuildRolesExecutor {
             ctx.author.to_string(),
             ctx.author.to_string()
         )
-        .execute(&ctx.data.data.pool)
+        .execute(&ctx.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Failed to insert role: {:?}", e),
@@ -204,7 +205,7 @@ impl SettingCreator for GuildRolesExecutor {
             ctx.guild_id.to_string(),
             res.role_id.to_string()
         )
-        .execute(&ctx.data.data.pool)
+        .execute(&ctx.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Failed to update guild members cache: {:?}", e),
@@ -217,16 +218,16 @@ impl SettingCreator for GuildRolesExecutor {
 }
 
 #[async_trait::async_trait]
-impl SettingUpdater for GuildRolesExecutor {
+impl SettingUpdater<SettingsData> for GuildRolesExecutor {
     async fn update<'a>(
         &self,
-        ctx: HookContext<'a>,
-        entry: indexmap::IndexMap<String, splashcore_rs::value::Value>,
-    ) -> Result<indexmap::IndexMap<String, splashcore_rs::value::Value>, SettingsError> {
-        check_perms(&ctx, "guild_roles.update".into()).await?;
+        ctx: &SettingsData,
+        entry: indexmap::IndexMap<String, Value>,
+    ) -> Result<indexmap::IndexMap<String, Value>, SettingsError> {
+        check_perms(ctx, "guild_roles.update".into()).await?;
 
         let res = self
-            .base_verify_checks(&ctx, &entry, OperationType::Update)
+            .base_verify_checks(ctx, &entry, OperationType::Update)
             .await?;
 
         sqlx::query!(
@@ -238,7 +239,7 @@ impl SettingUpdater for GuildRolesExecutor {
             ctx.guild_id.to_string(),
             res.role_id.to_string()
         )
-        .execute(&ctx.data.data.pool)
+        .execute(&ctx.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Failed to update role: {:?}", e),
@@ -251,16 +252,16 @@ impl SettingUpdater for GuildRolesExecutor {
 }
 
 #[async_trait::async_trait]
-impl SettingDeleter for GuildRolesExecutor {
+impl SettingDeleter<SettingsData> for GuildRolesExecutor {
     async fn delete<'a>(
         &self,
-        ctx: HookContext<'a>,
-        primary_key: splashcore_rs::value::Value,
+        ctx: &SettingsData,
+        primary_key: Value,
     ) -> Result<(), SettingsError> {
-        check_perms(&ctx, "guild_roles.delete".into()).await?;
+        check_perms(ctx, "guild_roles.delete".into()).await?;
 
         let Some(row) = sqlx::query!("SELECT role_id, perms, index, display_name FROM guild_roles WHERE guild_id = $1 AND role_id = $2", ctx.guild_id.to_string(), primary_key.to_string())
-        .fetch_optional(&ctx.data.data.pool)
+        .fetch_optional(&ctx.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Error while fetching roles: {}", e),
@@ -281,7 +282,7 @@ impl SettingDeleter for GuildRolesExecutor {
         };
 
         let res = self
-            .base_verify_checks(&ctx, &entry, OperationType::Delete)
+            .base_verify_checks(ctx, &entry, OperationType::Delete)
             .await?;
 
         sqlx::query!(
@@ -289,7 +290,7 @@ impl SettingDeleter for GuildRolesExecutor {
             ctx.guild_id.to_string(),
             res.role_id.to_string()
         )
-        .execute(&ctx.data.data.pool)
+        .execute(&ctx.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Failed to delete role: {:?}", e),
@@ -302,7 +303,7 @@ impl SettingDeleter for GuildRolesExecutor {
             ctx.guild_id.to_string(),
             res.role_id.to_string()
         )
-        .execute(&ctx.data.data.pool)
+        .execute(&ctx.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Failed to update guild members cache: {:?}", e),
@@ -324,7 +325,7 @@ pub struct GreBaseVerifyChecksResult {
 impl GuildRolesExecutor {
     async fn base_verify_checks(
         &self,
-        ctx: &HookContext<'_>,
+        ctx: &SettingsData,
         state: &indexmap::IndexMap<String, Value>,
         op: OperationType,
     ) -> Result<GreBaseVerifyChecksResult, SettingsError> {
@@ -359,7 +360,7 @@ impl GuildRolesExecutor {
                     "SELECT MAX(index) FROM guild_roles WHERE guild_id = $1",
                     ctx.guild_id.to_string()
                 )
-                .fetch_one(&ctx.data.data.pool)
+                .fetch_one(&ctx.data.pool)
                 .await
                 .map_err(|e| SettingsError::Generic {
                     message: format!("Failed to get highest index: {:?}", e),
@@ -428,9 +429,9 @@ impl GuildRolesExecutor {
         };
 
         let guild = sandwich_driver::guild(
-            &ctx.data.serenity_context.cache,
-            &ctx.data.serenity_context.http,
-            &ctx.data.data.reqwest,
+            &ctx.serenity_context.cache,
+            &ctx.serenity_context.http,
+            &ctx.data.reqwest,
             ctx.guild_id,
         )
         .await
@@ -451,9 +452,9 @@ impl GuildRolesExecutor {
         }
 
         let Some(member) = sandwich_driver::member_in_guild(
-            &ctx.data.serenity_context.cache,
-            &ctx.data.serenity_context.http,
-            &ctx.data.data.reqwest,
+            &ctx.serenity_context.cache,
+            &ctx.serenity_context.http,
+            &ctx.data.reqwest,
             ctx.guild_id,
             ctx.author,
         )
@@ -476,7 +477,7 @@ impl GuildRolesExecutor {
                 "SELECT index, role_id, perms FROM guild_roles WHERE guild_id = $1",
                 ctx.guild_id.to_string()
             )
-            .fetch_all(&ctx.data.data.pool)
+            .fetch_all(&ctx.data.pool)
             .await
             .map_err(|e| SettingsError::Generic {
                 message: format!("Failed to get current role configuration: {:?}", e),
@@ -559,7 +560,7 @@ impl GuildRolesExecutor {
         }
 
         let author_kittycat_perms = silverpelt::member_permission_calc::get_kittycat_perms(
-            &ctx.data.data.pool,
+            &ctx.data.pool,
             ctx.guild_id,
             guild.owner_id,
             ctx.author,
@@ -670,7 +671,7 @@ impl GuildRolesExecutor {
     }
 }
 
-pub static GUILD_MEMBERS: LazyLock<Setting> = LazyLock::new(|| Setting {
+pub static GUILD_MEMBERS: LazyLock<Setting<SettingsData>> = LazyLock::new(|| Setting {
     id: "guild_members".to_string(),
     name: "Server Members".to_string(),
     description: "Manage server members".to_string(),
@@ -682,7 +683,7 @@ pub static GUILD_MEMBERS: LazyLock<Setting> = LazyLock::new(|| Setting {
             name: "User ID".to_string(),
             description: "The user ID. Cannot be updated once set".to_string(),
             column_type: ColumnType::new_scalar(InnerColumnType::String {
-                kind: InnerColumnTypeStringKind::User {},
+                kind: "user".to_string(),
                 min_length: None,
                 max_length: Some(64),
                 allowed_values: vec![],
@@ -699,7 +700,7 @@ pub static GUILD_MEMBERS: LazyLock<Setting> = LazyLock::new(|| Setting {
                 "Any permission overrides the member has. This can and should be edited if needed"
                     .to_string(),
             column_type: ColumnType::new_array(InnerColumnType::String {
-                kind: InnerColumnTypeStringKind::KittycatPermission {},
+                kind: "kittycat".to_string(),
                 min_length: None,
                 max_length: Some(64),
                 allowed_values: vec![],
@@ -722,7 +723,7 @@ pub static GUILD_MEMBERS: LazyLock<Setting> = LazyLock::new(|| Setting {
         ar_settings::common_columns::created_at(),
     ]),
     title_template: "{user_id}, perm_overrides={perm_overrides}".to_string(),
-    operations: GuildMembersExecutor.into(),
+    operations: SettingOperations::from(GuildMembersExecutor),
 });
 
 pub struct GmeBaseVerifyChecksResult {
@@ -786,7 +787,7 @@ impl GuildMembersExecutor {
 
     async fn verify(
         &self,
-        ctx: &HookContext<'_>,
+        ctx: &SettingsData,
         state: &indexmap::IndexMap<String, Value>,
         op: OperationType,
     ) -> Result<GmeBaseVerifyChecksResult, SettingsError> {
@@ -819,7 +820,7 @@ impl GuildMembersExecutor {
                 ctx.guild_id.to_string(),
                 user_id.to_string()
             )
-            .fetch_one(&ctx.data.data.pool)
+            .fetch_one(&ctx.data.pool)
             .await
             .map_err(|e| SettingsError::Generic {
                 message: format!("Failed to get current public status: {:?}", e),
@@ -864,9 +865,9 @@ impl GuildMembersExecutor {
         };
 
         let guild = sandwich_driver::guild(
-            &ctx.data.serenity_context.cache,
-            &ctx.data.serenity_context.http,
-            &ctx.data.data.reqwest,
+            &ctx.serenity_context.cache,
+            &ctx.serenity_context.http,
+            &ctx.data.reqwest,
             ctx.guild_id,
         )
         .await
@@ -889,8 +890,8 @@ impl GuildMembersExecutor {
         let author_kittycat_perms =
             match self
                 .get_kittycat_perms_for_user(
-                    ctx.data,
-                    &ctx.data.data.pool,
+                    ctx,
+                    &ctx.data.pool,
                     ctx.guild_id,
                     guild.owner_id,
                     ctx.author,
@@ -911,8 +912,8 @@ impl GuildMembersExecutor {
         let (target_member_roles, current_user_kittycat_perms) =
             match self
                 .get_kittycat_perms_for_user(
-                    ctx.data,
-                    &ctx.data.data.pool,
+                    ctx,
+                    &ctx.data.pool,
                     ctx.guild_id,
                     guild.owner_id,
                     user_id,
@@ -940,7 +941,7 @@ impl GuildMembersExecutor {
 
             let user_positions =
                 silverpelt::member_permission_calc::get_user_positions_from_db(
-                    &ctx.data.data.pool,
+                    &ctx.data.pool,
                     ctx.guild_id,
                     &roles_str,
                 )
@@ -1019,14 +1020,14 @@ impl GuildMembersExecutor {
 }
 
 #[async_trait::async_trait]
-impl SettingView for GuildMembersExecutor {
+impl SettingView<SettingsData> for GuildMembersExecutor {
     async fn view<'a>(
         &self,
-        context: HookContext<'a>,
-        _filters: indexmap::IndexMap<String, splashcore_rs::value::Value>,
-    ) -> Result<Vec<indexmap::IndexMap<String, splashcore_rs::value::Value>>, SettingsError> {
+        context: &SettingsData,
+        _filters: indexmap::IndexMap<String, Value>,
+    ) -> Result<Vec<indexmap::IndexMap<String, Value>>, SettingsError> {
         let rows = sqlx::query!("SELECT user_id, perm_overrides, public, created_at FROM guild_members WHERE guild_id = $1", context.guild_id.to_string())
-        .fetch_all(&context.data.data.pool)
+        .fetch_all(&context.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Error while fetching guild roles: {}", e),
@@ -1052,22 +1053,22 @@ impl SettingView for GuildMembersExecutor {
 }
 
 #[async_trait::async_trait]
-impl SettingCreator for GuildMembersExecutor {
+impl SettingCreator<SettingsData> for GuildMembersExecutor {
     async fn create<'a>(
         &self,
-        ctx: HookContext<'a>,
-        entry: indexmap::IndexMap<String, splashcore_rs::value::Value>,
-    ) -> Result<indexmap::IndexMap<String, splashcore_rs::value::Value>, SettingsError> {
-        check_perms(&ctx, "guild_members.create".into()).await?;
+        ctx: &SettingsData,
+        entry: indexmap::IndexMap<String, Value>,
+    ) -> Result<indexmap::IndexMap<String, Value>, SettingsError> {
+        check_perms(ctx, "guild_members.create".into()).await?;
 
-        let res = self.verify(&ctx, &entry, OperationType::Create).await?;
+        let res = self.verify(ctx, &entry, OperationType::Create).await?;
 
         let count = sqlx::query!(
             "SELECT COUNT(*) FROM guild_members WHERE guild_id = $1 AND user_id = $2",
             ctx.guild_id.to_string(),
             res.user_id.to_string()
         )
-        .fetch_one(&ctx.data.data.pool)
+        .fetch_one(&ctx.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Failed to check if role exists: {:?}", e),
@@ -1092,7 +1093,7 @@ impl SettingCreator for GuildMembersExecutor {
             &res.perm_overrides.into_iter().map(|x| x.to_string()).collect::<Vec<String>>(),
             res.public
         )
-        .execute(&ctx.data.data.pool)
+        .execute(&ctx.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Failed to insert role: {:?}", e),
@@ -1105,15 +1106,15 @@ impl SettingCreator for GuildMembersExecutor {
 }
 
 #[async_trait::async_trait]
-impl SettingUpdater for GuildMembersExecutor {
+impl SettingUpdater<SettingsData> for GuildMembersExecutor {
     async fn update<'a>(
         &self,
-        ctx: HookContext<'a>,
-        entry: indexmap::IndexMap<String, splashcore_rs::value::Value>,
-    ) -> Result<indexmap::IndexMap<String, splashcore_rs::value::Value>, SettingsError> {
-        check_perms(&ctx, "guild_members.update".into()).await?;
+        ctx: &SettingsData,
+        entry: indexmap::IndexMap<String, Value>,
+    ) -> Result<indexmap::IndexMap<String, Value>, SettingsError> {
+        check_perms(ctx, "guild_members.update".into()).await?;
 
-        let res = self.verify(&ctx, &entry, OperationType::Update).await?;
+        let res = self.verify(ctx, &entry, OperationType::Update).await?;
 
         sqlx::query!(
             "UPDATE guild_members SET perm_overrides = $1, public = $2 WHERE guild_id = $3 AND user_id = $4",
@@ -1122,7 +1123,7 @@ impl SettingUpdater for GuildMembersExecutor {
             ctx.guild_id.to_string(),
             res.user_id.to_string()
         )
-        .execute(&ctx.data.data.pool)
+        .execute(&ctx.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Failed to update role: {:?}", e),
@@ -1135,16 +1136,16 @@ impl SettingUpdater for GuildMembersExecutor {
 }
 
 #[async_trait::async_trait]
-impl SettingDeleter for GuildMembersExecutor {
+impl SettingDeleter<SettingsData> for GuildMembersExecutor {
     async fn delete<'a>(
         &self,
-        ctx: HookContext<'a>,
-        primary_key: splashcore_rs::value::Value,
+        ctx: &SettingsData,
+        primary_key: Value,
     ) -> Result<(), SettingsError> {
-        check_perms(&ctx, "guild_members.delete".into()).await?;
+        check_perms(ctx, "guild_members.delete".into()).await?;
 
         let Some(row) = sqlx::query!("SELECT user_id, perm_overrides, public FROM guild_members WHERE guild_id = $1 AND user_id = $2", ctx.guild_id.to_string(), primary_key.to_string())
-        .fetch_optional(&ctx.data.data.pool)
+        .fetch_optional(&ctx.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Error while fetching roles: {}", e),
@@ -1163,14 +1164,14 @@ impl SettingDeleter for GuildMembersExecutor {
             "public".to_string() => Value::Boolean(row.public),
         };
 
-        let res = self.verify(&ctx, &entry, OperationType::Delete).await?;
+        let res = self.verify(ctx, &entry, OperationType::Delete).await?;
 
         sqlx::query!(
             "DELETE FROM guild_members WHERE guild_id = $1 AND user_id = $2",
             ctx.guild_id.to_string(),
             res.user_id.to_string()
         )
-        .execute(&ctx.data.data.pool)
+        .execute(&ctx.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Failed to delete role: {:?}", e),
@@ -1182,7 +1183,7 @@ impl SettingDeleter for GuildMembersExecutor {
     }
 }
 
-pub static GUILD_TEMPLATES: LazyLock<Setting> = LazyLock::new(|| {
+pub static GUILD_TEMPLATES: LazyLock<Setting<SettingsData>> = LazyLock::new(|| {
     Setting {
         id: "guild_templates".to_string(),
         name: "Server Templates".to_string(),
@@ -1195,7 +1196,7 @@ pub static GUILD_TEMPLATES: LazyLock<Setting> = LazyLock::new(|| {
                 name: "Name".to_string(),
                 description: "The name to give to the template".to_string(),
                 column_type: ColumnType::new_scalar(InnerColumnType::String {
-                    kind: InnerColumnTypeStringKind::Normal {},
+                    kind: "normal".to_string(),
                     min_length: None,
                     max_length: Some(64),
                     allowed_values: vec![],
@@ -1210,7 +1211,7 @@ pub static GUILD_TEMPLATES: LazyLock<Setting> = LazyLock::new(|| {
                 name: "Language".to_string(),
                 description: "The language of the template. Only Roblox Luau is currently supported here.".to_string(),
                 column_type: ColumnType::new_scalar(InnerColumnType::String {
-                    kind: InnerColumnTypeStringKind::Normal {},
+                    kind: "normal".to_string(),
                     min_length: None,
                     max_length: Some(64),
                     allowed_values: vec!["luau".to_string()],
@@ -1225,9 +1226,7 @@ pub static GUILD_TEMPLATES: LazyLock<Setting> = LazyLock::new(|| {
                 name: "Content".to_string(),
                 description: "The content of the template".to_string(),
                 column_type: ColumnType::new_scalar(InnerColumnType::String {
-                    kind: InnerColumnTypeStringKind::Textarea {
-                        ctx: "template".to_string(),
-                    },
+                    kind: "template".to_string(),
                     min_length: None,
                     max_length: None,
                     allowed_values: vec![],
@@ -1254,7 +1253,7 @@ pub static GUILD_TEMPLATES: LazyLock<Setting> = LazyLock::new(|| {
 
                         vec
                     },
-                    kind: InnerColumnTypeStringKind::Normal {} 
+                    kind: "normal".to_string()
                 }),
                 nullable: true,
                 suggestions: ColumnSuggestion::None {},
@@ -1265,7 +1264,7 @@ pub static GUILD_TEMPLATES: LazyLock<Setting> = LazyLock::new(|| {
                 id: "allowed_caps".to_string(),
                 name: "Capabilities".to_string(),
                 description: "The capabilities the template will have.".to_string(),
-                column_type: ColumnType::new_array(InnerColumnType::String { min_length: None, max_length: None, allowed_values: vec![], kind: InnerColumnTypeStringKind::Normal {} }),
+                column_type: ColumnType::new_array(InnerColumnType::String { min_length: None, max_length: None, allowed_values: vec![], kind: "normal".to_string() }),
                 nullable: true,
                 suggestions: ColumnSuggestion::Static {
                     suggestions: vec![
@@ -1280,10 +1279,7 @@ pub static GUILD_TEMPLATES: LazyLock<Setting> = LazyLock::new(|| {
                 name: "Error Channel".to_string(),
                 description: "The channel to report errors to. If not specified, an Error event will be omitted instead".to_string(),
                 column_type: ColumnType::new_scalar(InnerColumnType::String {
-                    kind: InnerColumnTypeStringKind::Channel {
-                        needed_bot_permissions: serenity::all::Permissions::SEND_MESSAGES,
-                        allowed_channel_types: vec![]
-                    },
+                    kind: "channel".to_string(),
                     min_length: None,
                     max_length: None,
                     allowed_values: vec![],
@@ -1299,7 +1295,7 @@ pub static GUILD_TEMPLATES: LazyLock<Setting> = LazyLock::new(|| {
             ar_settings::common_columns::last_updated_by(),
         ]),
         title_template: "{name}".to_string(),
-        operations: GuildTemplateExecutor.into(),
+        operations: SettingOperations::from(GuildTemplateExecutor),
     }
 });
 
@@ -1307,7 +1303,118 @@ pub static GUILD_TEMPLATES: LazyLock<Setting> = LazyLock::new(|| {
 pub struct GuildTemplateExecutor;
 
 impl GuildTemplateExecutor {
-    async fn validate(&self, ctx: &HookContext<'_>, name: &str) -> Result<(), SettingsError> {
+    async fn validate_channel(&self, ctx: &SettingsData, channel_field: &str, channel_id: serenity::all::ChannelId) -> Result<(), SettingsError> {
+        // Perform required checks
+        let channel = sandwich_driver::channel(
+            &ctx.serenity_context.cache,
+            &ctx.serenity_context.http,
+            &ctx.data.reqwest,
+            Some(ctx.guild_id),
+            channel_id,
+        )
+        .await
+        .map_err(|e| SettingsError::SchemaCheckValidationError {
+            column: channel_field.to_string(),
+            check: "channel_check".to_string(),
+            accepted_range: "Valid channel id".to_string(),
+            error: e.to_string(),
+        })?;
+
+        let Some(channel) = channel else {
+            return Err(SettingsError::SchemaCheckValidationError {
+                column: channel_field.to_string(),
+                check: "channel_check".to_string(),
+                accepted_range: "Valid channel id".to_string(),
+                error: "Channel not found".to_string(),
+            });
+        };
+
+        let Some(guild_channel) = channel.guild() else {
+            return Err(SettingsError::SchemaCheckValidationError {
+                column: channel_field.to_string(),
+                check: "channel_check".to_string(),
+                accepted_range: "Valid channel id".to_string(),
+                error: "Channel not in guild".to_string(),
+            });
+        };
+
+        if guild_channel.guild_id != ctx.guild_id {
+            return Err(SettingsError::SchemaCheckValidationError {
+                column: channel_field.to_string(),
+                check: "channel_check".to_string(),
+                accepted_range: "Valid channel id".to_string(),
+                error: "Channel not in guild".to_string(),
+            });
+        }
+
+        let bot_user_id =
+            ctx.serenity_context.cache.current_user().id;
+
+        let bot_user = sandwich_driver::member_in_guild(
+            &ctx.serenity_context.cache,
+            &ctx.serenity_context.http,
+            &ctx.data.reqwest,
+            ctx.guild_id,
+            bot_user_id,
+        )
+        .await
+        .map_err(|e| {
+            SettingsError::SchemaCheckValidationError {
+                column: channel_field.to_string(),
+                check: "bot_user".to_string(),
+                accepted_range: "Valid bot user".to_string(),
+                error: e.to_string(),
+            }
+        })?;
+
+        let Some(bot_user) = bot_user else {
+            return Err(
+                SettingsError::SchemaCheckValidationError {
+                    column: channel_field.to_string(),
+                    check: "bot_user".to_string(),
+                    accepted_range: "Valid bot user"
+                        .to_string(),
+                    error: "Bot user not found".to_string(),
+                },
+            );
+        };
+
+        let guild = sandwich_driver::guild(
+            &ctx.serenity_context.cache,
+            &ctx.serenity_context.http,
+            &ctx.data.reqwest,
+            ctx.guild_id,
+        )
+        .await
+        .map_err(|e| SettingsError::SchemaCheckValidationError {
+            column: channel_field.to_string(),
+            check: "guild".to_string(),
+            accepted_range: "Valid guild".to_string(),
+            error: e.to_string(),
+        })?;
+
+        let permissions =
+            guild.user_permissions_in(&guild_channel, &bot_user);
+
+        if !permissions.contains(serenity::all::Permissions::SEND_MESSAGES) {
+            return Err(
+                SettingsError::SchemaCheckValidationError {
+                    column: channel_field.to_string(),
+                    check: "bot_permissions".to_string(),
+                    accepted_range: format!(
+                        "{:?}",
+                        serenity::all::Permissions::SEND_MESSAGES
+                    ),
+                    error: "Bot does not have required permissions"
+                        .to_string(),
+                },
+            );
+        }
+
+        Ok(())        
+    }
+
+    async fn validate(&self, ctx: &SettingsData, name: &str) -> Result<(), SettingsError> {
         if name.starts_with("$shop/") {
             let (shop_tname, shop_tversion) = silverpelt::templates::parse_shop_template(name)
                 .map_err(|e| SettingsError::Generic {
@@ -1321,7 +1428,7 @@ impl GuildTemplateExecutor {
                 shop_tname,
                 shop_tversion
             )
-            .fetch_one(&ctx.data.data.pool)
+            .fetch_one(&ctx.data.pool)
             .await
             .map_err(|e| SettingsError::Generic {
                 message: format!("Failed to get shop template: {:?}", e),
@@ -1341,10 +1448,10 @@ impl GuildTemplateExecutor {
         Ok(())
     }
 
-    async fn post_action(&self, ctx: &HookContext<'_>, name: &str) -> Result<(), SettingsError> {
+    async fn post_action(&self, ctx: &SettingsData, name: &str) -> Result<(), SettingsError> {
         // Dispatch a OnStartup event for the template
         silverpelt::ar_event::AntiraidEvent::OnStartup(vec![name.to_string()])
-            .dispatch_to_template_worker_and_nowait(&ctx.data.data, ctx.guild_id)
+            .dispatch_to_template_worker_and_nowait(&ctx.data, ctx.guild_id)
             .await
             .map_err(|e| SettingsError::Generic {
                 message: format!("Failed to dispatch OnStartup event: {:?}", e),
@@ -1357,18 +1464,18 @@ impl GuildTemplateExecutor {
 }
 
 #[async_trait::async_trait]
-impl SettingView for GuildTemplateExecutor {
+impl SettingView<SettingsData> for GuildTemplateExecutor {
     async fn view<'a>(
         &self,
-        context: HookContext<'a>,
-        _filters: indexmap::IndexMap<String, splashcore_rs::value::Value>,
-    ) -> Result<Vec<indexmap::IndexMap<String, splashcore_rs::value::Value>>, SettingsError> {
+        context: &SettingsData,
+        _filters: indexmap::IndexMap<String, Value>,
+    ) -> Result<Vec<indexmap::IndexMap<String, Value>>, SettingsError> {
         log::info!("Viewing guild templates for guild id: {}", context.guild_id);
 
-        check_perms(&context, "guild_templates.view".into()).await?;
+        check_perms(context,"guild_templates.view".into()).await?;
 
         let rows = sqlx::query!("SELECT name, content, language, allowed_caps, events, error_channel, created_at, created_by, last_updated_at, last_updated_by FROM guild_templates WHERE guild_id = $1", context.guild_id.to_string())
-        .fetch_all(&context.data.data.pool)
+        .fetch_all(&context.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Error while fetching guild templates: {}", e),
@@ -1410,13 +1517,13 @@ impl SettingView for GuildTemplateExecutor {
 }
 
 #[async_trait::async_trait]
-impl SettingCreator for GuildTemplateExecutor {
+impl SettingCreator<SettingsData> for GuildTemplateExecutor {
     async fn create<'a>(
         &self,
-        ctx: HookContext<'a>,
-        entry: indexmap::IndexMap<String, splashcore_rs::value::Value>,
-    ) -> Result<indexmap::IndexMap<String, splashcore_rs::value::Value>, SettingsError> {
-        check_perms(&ctx, "guild_templates.create".into()).await?;
+        ctx: &SettingsData,
+        entry: indexmap::IndexMap<String, Value>,
+    ) -> Result<indexmap::IndexMap<String, Value>, SettingsError> {
+        check_perms(ctx, "guild_templates.create".into()).await?;
 
         let Some(Value::String(name)) = entry.get("name") else {
             return Err(SettingsError::MissingOrInvalidField {
@@ -1430,7 +1537,7 @@ impl SettingCreator for GuildTemplateExecutor {
             ctx.guild_id.to_string(),
             name
         )
-        .fetch_one(&ctx.data.data.pool)
+        .fetch_one(&ctx.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Failed to check if template exists: {:?}", e),
@@ -1448,7 +1555,7 @@ impl SettingCreator for GuildTemplateExecutor {
             });
         }
 
-        self.validate(&ctx, name).await?;
+        self.validate(ctx, name).await?;
 
         let Some(Value::String(language)) = entry.get("language") else {
             return Err(SettingsError::MissingOrInvalidField {
@@ -1507,7 +1614,17 @@ impl SettingCreator for GuildTemplateExecutor {
         };
 
         let error_channel = match entry.get("error_channel") {
-            Some(Value::String(error_channel)) => Some(error_channel.to_string()),
+            Some(Value::String(error_channel)) => {
+                let channel_id: serenity::all::ChannelId = error_channel.parse().map_err(|e| SettingsError::Generic {
+                    message: format!("Failed to parse error channel: {:?}", e),
+                    src: "GuildTemplateExecutor".to_string(),
+                    typ: "external".to_string(),
+                })?;
+
+                self.validate_channel(ctx, "error_channel", channel_id).await?;
+
+                Some(error_channel.to_string())
+            },
             _ => None,
         };
 
@@ -1523,7 +1640,7 @@ impl SettingCreator for GuildTemplateExecutor {
             ctx.author.to_string(),
             ctx.author.to_string()
         )
-        .execute(&ctx.data.data.pool)
+        .execute(&ctx.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Failed to insert template: {:?}", e),
@@ -1531,20 +1648,20 @@ impl SettingCreator for GuildTemplateExecutor {
             typ: "internal".to_string(),
         })?;
 
-        self.post_action(&ctx, name).await?;
+        self.post_action(ctx, name).await?;
 
         Ok(entry)
     }
 }
 
 #[async_trait::async_trait]
-impl SettingUpdater for GuildTemplateExecutor {
+impl SettingUpdater<SettingsData> for GuildTemplateExecutor {
     async fn update<'a>(
         &self,
-        ctx: HookContext<'a>,
-        entry: indexmap::IndexMap<String, splashcore_rs::value::Value>,
-    ) -> Result<indexmap::IndexMap<String, splashcore_rs::value::Value>, SettingsError> {
-        check_perms(&ctx, "guild_templates.update".into()).await?;
+        ctx: &SettingsData,
+        entry: indexmap::IndexMap<String, Value>,
+    ) -> Result<indexmap::IndexMap<String, Value>, SettingsError> {
+        check_perms(ctx, "guild_templates.update".into()).await?;
 
         let Some(Value::String(name)) = entry.get("name") else {
             return Err(SettingsError::MissingOrInvalidField {
@@ -1553,7 +1670,7 @@ impl SettingUpdater for GuildTemplateExecutor {
             });
         };
 
-        self.validate(&ctx, name).await?;
+        self.validate(ctx, name).await?;
 
         let Some(Value::String(language)) = entry.get("language") else {
             return Err(SettingsError::MissingOrInvalidField {
@@ -1613,7 +1730,17 @@ impl SettingUpdater for GuildTemplateExecutor {
         
 
         let error_channel = match entry.get("error_channel") {
-            Some(Value::String(error_channel)) => Some(error_channel.to_string()),
+            Some(Value::String(error_channel)) => {
+                let channel_id: serenity::all::ChannelId = error_channel.parse().map_err(|e| SettingsError::Generic {
+                    message: format!("Failed to parse error channel: {:?}", e),
+                    src: "GuildTemplateExecutor".to_string(),
+                    typ: "external".to_string(),
+                })?;
+
+                self.validate_channel(ctx, "error_channel", channel_id).await?;
+
+                Some(error_channel.to_string())
+            },
             _ => None,
         };
 
@@ -1628,7 +1755,7 @@ impl SettingUpdater for GuildTemplateExecutor {
             ctx.guild_id.to_string(),
             name
         )
-        .execute(&ctx.data.data.pool)
+        .execute(&ctx.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Failed to update template: {:?}", e),
@@ -1636,27 +1763,27 @@ impl SettingUpdater for GuildTemplateExecutor {
             typ: "internal".to_string(),
         })?;
 
-        self.post_action(&ctx, name).await?;
+        self.post_action(ctx, name).await?;
 
         Ok(entry)
     }
 }
 
 #[async_trait::async_trait]
-impl SettingDeleter for GuildTemplateExecutor {
+impl SettingDeleter<SettingsData> for GuildTemplateExecutor {
     async fn delete<'a>(
         &self,
-        ctx: HookContext<'a>,
-        primary_key: splashcore_rs::value::Value,
+        ctx: &SettingsData,
+        primary_key: Value,
     ) -> Result<(), SettingsError> {
-        check_perms(&ctx, "guild_templates.delete".into()).await?;
+        check_perms(ctx, "guild_templates.delete".into()).await?;
 
         let Some(row) = sqlx::query!(
             "SELECT name FROM guild_templates WHERE guild_id = $1 AND name = $2",
             ctx.guild_id.to_string(),
             primary_key.to_string()
         )
-        .fetch_optional(&ctx.data.data.pool)
+        .fetch_optional(&ctx.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Error while fetching template: {}", e),
@@ -1676,7 +1803,7 @@ impl SettingDeleter for GuildTemplateExecutor {
             ctx.guild_id.to_string(),
             name
         )
-        .execute(&ctx.data.data.pool)
+        .execute(&ctx.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Failed to delete template: {:?}", e),
@@ -1684,13 +1811,13 @@ impl SettingDeleter for GuildTemplateExecutor {
             typ: "internal".to_string(),
         })?;
 
-        self.post_action(&ctx, &name).await?;
+        self.post_action(ctx, &name).await?;
 
         Ok(())
     }
 }
 
-pub static GUILD_TEMPLATES_KV: LazyLock<Setting> = LazyLock::new(|| Setting {
+pub static GUILD_TEMPLATES_KV: LazyLock<Setting<SettingsData>> = LazyLock::new(|| Setting {
     id: "guild_templates_kv".to_string(),
     name: "Server Templates (key-value db)".to_string(),
     description: "Key-value database available to templates on this server".to_string(),
@@ -1702,7 +1829,7 @@ pub static GUILD_TEMPLATES_KV: LazyLock<Setting> = LazyLock::new(|| Setting {
             name: "Key".to_string(),
             description: "Key".to_string(),
             column_type: ColumnType::new_scalar(InnerColumnType::String {
-                kind: InnerColumnTypeStringKind::Normal {},
+                kind: "normal".to_string(),
                 min_length: None,
                 max_length: Some(silverpelt::templates::LuaKVConstraints::default().max_key_length),
                 allowed_values: vec![],
@@ -1728,23 +1855,23 @@ pub static GUILD_TEMPLATES_KV: LazyLock<Setting> = LazyLock::new(|| Setting {
         ar_settings::common_columns::last_updated_at(),
     ]),
     title_template: "{key}".to_string(),
-    operations: GuildTemplatesKVExecutor.into(),
+    operations: SettingOperations::from(GuildTemplatesKVExecutor),
 });
 
 #[derive(Clone)]
 pub struct GuildTemplatesKVExecutor;
 
 #[async_trait::async_trait]
-impl SettingView for GuildTemplatesKVExecutor {
+impl SettingView<SettingsData> for GuildTemplatesKVExecutor {
     async fn view<'a>(
         &self,
-        context: HookContext<'a>,
-        _filters: indexmap::IndexMap<String, splashcore_rs::value::Value>,
-    ) -> Result<Vec<indexmap::IndexMap<String, splashcore_rs::value::Value>>, SettingsError> {
-        check_perms(&context, "guild_templates_kv.view".into()).await?;
+        context: &SettingsData,
+        _filters: indexmap::IndexMap<String, Value>,
+    ) -> Result<Vec<indexmap::IndexMap<String, Value>>, SettingsError> {
+        check_perms(context,"guild_templates_kv.view".into()).await?;
 
         let rows = sqlx::query!("SELECT key, value, created_at, last_updated_at FROM guild_templates_kv WHERE guild_id = $1", context.guild_id.to_string())
-        .fetch_all(&context.data.data.pool)
+        .fetch_all(&context.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Error while fetching guild templates kv: {}", e),
@@ -1770,13 +1897,13 @@ impl SettingView for GuildTemplatesKVExecutor {
 }
 
 #[async_trait::async_trait]
-impl SettingCreator for GuildTemplatesKVExecutor {
+impl SettingCreator<SettingsData> for GuildTemplatesKVExecutor {
     async fn create<'a>(
         &self,
-        ctx: HookContext<'a>,
-        entry: indexmap::IndexMap<String, splashcore_rs::value::Value>,
-    ) -> Result<indexmap::IndexMap<String, splashcore_rs::value::Value>, SettingsError> {
-        check_perms(&ctx, "guild_templates_kv.create".into()).await?;
+        ctx: &SettingsData,
+        entry: indexmap::IndexMap<String, Value>,
+    ) -> Result<indexmap::IndexMap<String, Value>, SettingsError> {
+        check_perms(ctx, "guild_templates_kv.create".into()).await?;
 
         let Some(Value::String(key)) = entry.get("key") else {
             return Err(SettingsError::MissingOrInvalidField {
@@ -1789,7 +1916,7 @@ impl SettingCreator for GuildTemplatesKVExecutor {
             "SELECT COUNT(*) FROM guild_templates_kv WHERE guild_id = $1",
             ctx.guild_id.to_string()
         )
-        .fetch_one(&ctx.data.data.pool)
+        .fetch_one(&ctx.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Failed to check total kv count: {:?}", e),
@@ -1821,7 +1948,7 @@ impl SettingCreator for GuildTemplatesKVExecutor {
             ctx.guild_id.to_string(),
             key
         )
-        .fetch_one(&ctx.data.data.pool)
+        .fetch_one(&ctx.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Failed to check if kv exists: {:?}", e),
@@ -1852,7 +1979,7 @@ impl SettingCreator for GuildTemplatesKVExecutor {
             key,
             value
         )
-        .execute(&ctx.data.data.pool)
+        .execute(&ctx.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Failed to insert kv: {:?}", e),
@@ -1865,13 +1992,13 @@ impl SettingCreator for GuildTemplatesKVExecutor {
 }
 
 #[async_trait::async_trait]
-impl SettingUpdater for GuildTemplatesKVExecutor {
+impl SettingUpdater<SettingsData> for GuildTemplatesKVExecutor {
     async fn update<'a>(
         &self,
-        ctx: HookContext<'a>,
-        entry: indexmap::IndexMap<String, splashcore_rs::value::Value>,
-    ) -> Result<indexmap::IndexMap<String, splashcore_rs::value::Value>, SettingsError> {
-        check_perms(&ctx, "guild_templates_kv.update".into()).await?;
+        ctx: &SettingsData,
+        entry: indexmap::IndexMap<String, Value>,
+    ) -> Result<indexmap::IndexMap<String, Value>, SettingsError> {
+        check_perms(ctx, "guild_templates_kv.update".into()).await?;
 
         let Some(Value::String(key)) = entry.get("key") else {
             return Err(SettingsError::MissingOrInvalidField {
@@ -1893,7 +2020,7 @@ impl SettingUpdater for GuildTemplatesKVExecutor {
             ctx.guild_id.to_string(),
             key
         )
-        .execute(&ctx.data.data.pool)
+        .execute(&ctx.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Failed to update kv: {:?}", e),
@@ -1906,20 +2033,20 @@ impl SettingUpdater for GuildTemplatesKVExecutor {
 }
 
 #[async_trait::async_trait]
-impl SettingDeleter for GuildTemplatesKVExecutor {
+impl SettingDeleter<SettingsData> for GuildTemplatesKVExecutor {
     async fn delete<'a>(
         &self,
-        ctx: HookContext<'a>,
-        primary_key: splashcore_rs::value::Value,
+        ctx: &SettingsData,
+        primary_key: Value,
     ) -> Result<(), SettingsError> {
-        check_perms(&ctx, "guild_templates_kv.delete".into()).await?;
+        check_perms(ctx, "guild_templates_kv.delete".into()).await?;
 
         if sqlx::query!(
             "SELECT COUNT(*) FROM guild_templates_kv WHERE guild_id = $1 AND key = $2",
             ctx.guild_id.to_string(),
             primary_key.to_string()
         )
-        .fetch_one(&ctx.data.data.pool)
+        .fetch_one(&ctx.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Error while fetching kv: {}", e),
@@ -1940,7 +2067,7 @@ impl SettingDeleter for GuildTemplatesKVExecutor {
             ctx.guild_id.to_string(),
             primary_key.to_string()
         )
-        .execute(&ctx.data.data.pool)
+        .execute(&ctx.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Failed to delete kv: {:?}", e),
@@ -1952,7 +2079,7 @@ impl SettingDeleter for GuildTemplatesKVExecutor {
     }
 }
 
-pub static GUILD_TEMPLATE_SHOP: LazyLock<Setting> = LazyLock::new(|| {
+pub static GUILD_TEMPLATE_SHOP: LazyLock<Setting<SettingsData>> = LazyLock::new(|| {
     Setting {
         id: "template_shop".to_string(),
         name: "Created/Published Templates".to_string(),
@@ -1974,7 +2101,7 @@ pub static GUILD_TEMPLATE_SHOP: LazyLock<Setting> = LazyLock::new(|| {
                 name: "Name".to_string(),
                 description: "The name of the template on the shop. Cannot be updated once set".to_string(),
                 column_type: ColumnType::new_scalar(InnerColumnType::String {
-                    kind: InnerColumnTypeStringKind::Normal {},
+                    kind: "normal".to_string(),
                     min_length: None,
                     max_length: Some(64),
                     allowed_values: vec![],
@@ -1989,7 +2116,7 @@ pub static GUILD_TEMPLATE_SHOP: LazyLock<Setting> = LazyLock::new(|| {
                 name: "Friendly Name".to_string(),
                 description: "The friendly name of the template on the shop.".to_string(),
                 column_type: ColumnType::new_scalar(InnerColumnType::String {
-                    kind: InnerColumnTypeStringKind::Normal {},
+                    kind: "normal".to_string(),
                     min_length: None,
                     max_length: Some(64),
                     allowed_values: vec![],
@@ -2004,7 +2131,7 @@ pub static GUILD_TEMPLATE_SHOP: LazyLock<Setting> = LazyLock::new(|| {
                 name: "Language".to_string(),
                 description: "The language of the template. Only Roblox Luau is currently supported here. Cannot be updated once set".to_string(),
                 column_type: ColumnType::new_scalar(InnerColumnType::String {
-                    kind: InnerColumnTypeStringKind::Normal {},
+                    kind: "normal".to_string(),
                     min_length: None,
                     max_length: Some(64),
                     allowed_values: vec!["luau".to_string()],
@@ -2019,7 +2146,7 @@ pub static GUILD_TEMPLATE_SHOP: LazyLock<Setting> = LazyLock::new(|| {
                 name: "Version".to_string(),
                 description: "The version of the template. Cannot be updated once set".to_string(), 
                 column_type: ColumnType::new_scalar(InnerColumnType::String {
-                    kind: InnerColumnTypeStringKind::Normal {},
+                    kind: "normal".to_string(),
                     min_length: None,
                     max_length: Some(64),
                     allowed_values: vec![],
@@ -2034,7 +2161,7 @@ pub static GUILD_TEMPLATE_SHOP: LazyLock<Setting> = LazyLock::new(|| {
                 name: "Description".to_string(),
                 description: "The description of the template".to_string(), 
                 column_type: ColumnType::new_scalar(InnerColumnType::String {
-                    kind: InnerColumnTypeStringKind::Normal {},
+                    kind: "normal".to_string(),
                     min_length: None,
                     max_length: Some(4096),
                     allowed_values: vec![],
@@ -2049,9 +2176,7 @@ pub static GUILD_TEMPLATE_SHOP: LazyLock<Setting> = LazyLock::new(|| {
                 name: "Content".to_string(),
                 description: "The content of the template. Cannot be updated once set (use a new version for that)".to_string(),
                 column_type: ColumnType::new_scalar(InnerColumnType::String {
-                    kind: InnerColumnTypeStringKind::Textarea {
-                        ctx: "template".to_string(),
-                    },
+                    kind: "template".to_string(),
                     min_length: None,
                     max_length: None,
                     allowed_values: vec![],
@@ -2066,7 +2191,7 @@ pub static GUILD_TEMPLATE_SHOP: LazyLock<Setting> = LazyLock::new(|| {
                 name: "Events".to_string(),
                 description: "The events this template should have access to, Cannot be changed once set".to_string(),
                 column_type: ColumnType::new_array(InnerColumnType::String {
-                    kind: InnerColumnTypeStringKind::Normal {},
+                    kind: "normal".to_string(),
                     min_length: None,
                     max_length: None,
                     allowed_values: {
@@ -2089,7 +2214,7 @@ pub static GUILD_TEMPLATE_SHOP: LazyLock<Setting> = LazyLock::new(|| {
                 id: "allowed_caps".to_string(),
                 name: "Capabilities".to_string(),
                 description: "The capabilities the template needs to perform its full functionality. Cannot be changed once set".to_string(),
-                column_type: ColumnType::new_array(InnerColumnType::String { min_length: None, max_length: None, allowed_values: vec![], kind: InnerColumnTypeStringKind::Normal {} }),
+                column_type: ColumnType::new_array(InnerColumnType::String { min_length: None, max_length: None, allowed_values: vec![], kind: "normal".to_string() }),
                 nullable: true,
                 suggestions: ColumnSuggestion::Static {
                     suggestions: vec![
@@ -2104,7 +2229,7 @@ pub static GUILD_TEMPLATE_SHOP: LazyLock<Setting> = LazyLock::new(|| {
                 name: "Type".to_string(),
                 description: "The type of the template".to_string(),
                 column_type: ColumnType::new_scalar(InnerColumnType::String {
-                    kind: InnerColumnTypeStringKind::Normal {},
+                    kind: "normal".to_string(),
                     min_length: None,
                     max_length: None,
                     allowed_values: vec!["public".to_string(), "hidden".to_string()],
@@ -2121,7 +2246,7 @@ pub static GUILD_TEMPLATE_SHOP: LazyLock<Setting> = LazyLock::new(|| {
             ar_settings::common_columns::last_updated_by(),
         ]),
         title_template: "{name}".to_string(),
-        operations: GuildTemplateShopExecutor.into(),
+        operations: SettingOperations::from(GuildTemplateShopExecutor),
     }
 });
 
@@ -2129,16 +2254,16 @@ pub static GUILD_TEMPLATE_SHOP: LazyLock<Setting> = LazyLock::new(|| {
 pub struct GuildTemplateShopExecutor;
 
 #[async_trait::async_trait]
-impl SettingView for GuildTemplateShopExecutor {
+impl SettingView<SettingsData> for GuildTemplateShopExecutor {
     async fn view<'a>(
         &self,
-        context: HookContext<'a>,
-        _filters: indexmap::IndexMap<String, splashcore_rs::value::Value>,
-    ) -> Result<Vec<indexmap::IndexMap<String, splashcore_rs::value::Value>>, SettingsError> {
-        check_perms(&context, "guild_templates_shop.view".into()).await?;
+        context: &SettingsData,
+        _filters: indexmap::IndexMap<String, Value>,
+    ) -> Result<Vec<indexmap::IndexMap<String, Value>>, SettingsError> {
+        check_perms(context,"guild_templates_shop.view".into()).await?;
 
         let rows = sqlx::query!("SELECT id, name, friendly_name, language, allowed_caps, version, description, type, events, created_at, created_by, last_updated_at, last_updated_by FROM template_shop WHERE owner_guild = $1", context.guild_id.to_string())
-        .fetch_all(&context.data.data.pool)
+        .fetch_all(&context.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Error while fetching shop templates: {}", e),
@@ -2178,13 +2303,13 @@ impl SettingView for GuildTemplateShopExecutor {
 }
 
 #[async_trait::async_trait]
-impl SettingCreator for GuildTemplateShopExecutor {
+impl SettingCreator<SettingsData> for GuildTemplateShopExecutor {
     async fn create<'a>(
         &self,
-        ctx: HookContext<'a>,
-        entry: indexmap::IndexMap<String, splashcore_rs::value::Value>,
-    ) -> Result<indexmap::IndexMap<String, splashcore_rs::value::Value>, SettingsError> {
-        check_perms(&ctx, "guild_templates_shop.create".into()).await?;
+        ctx: &SettingsData,
+        entry: indexmap::IndexMap<String, Value>,
+    ) -> Result<indexmap::IndexMap<String, Value>, SettingsError> {
+        check_perms(ctx, "guild_templates_shop.create".into()).await?;
 
         let Some(Value::String(name)) = entry.get("name") else {
             return Err(SettingsError::MissingOrInvalidField {
@@ -2233,7 +2358,7 @@ impl SettingCreator for GuildTemplateShopExecutor {
                 ctx.guild_id.to_string(),
                 namespace
             )
-            .fetch_one(&ctx.data.data.pool)
+            .fetch_one(&ctx.data.pool)
             .await
             .map_err(|e| SettingsError::Generic {
                 message: format!("Failed to check if namespace exists: {:?}", e),
@@ -2293,7 +2418,7 @@ impl SettingCreator for GuildTemplateShopExecutor {
             name,
             version
         )
-        .fetch_one(&ctx.data.data.pool)
+        .fetch_one(&ctx.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Failed to check if shop template exists: {:?}", e),
@@ -2383,7 +2508,7 @@ impl SettingCreator for GuildTemplateShopExecutor {
             ctx.author.to_string(),
             &allowed_caps
         )
-        .fetch_one(&ctx.data.data.pool)
+        .fetch_one(&ctx.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Failed to insert shop template: {:?}", e),
@@ -2400,13 +2525,13 @@ impl SettingCreator for GuildTemplateShopExecutor {
 }
 
 #[async_trait::async_trait]
-impl SettingUpdater for GuildTemplateShopExecutor {
+impl SettingUpdater<SettingsData> for GuildTemplateShopExecutor {
     async fn update<'a>(
         &self,
-        ctx: HookContext<'a>,
-        entry: indexmap::IndexMap<String, splashcore_rs::value::Value>,
-    ) -> Result<indexmap::IndexMap<String, splashcore_rs::value::Value>, SettingsError> {
-        check_perms(&ctx, "guild_templates_shop.update".into()).await?;
+        ctx: &SettingsData,
+        entry: indexmap::IndexMap<String, Value>,
+    ) -> Result<indexmap::IndexMap<String, Value>, SettingsError> {
+        check_perms(ctx, "guild_templates_shop.update".into()).await?;
 
         let Some(Value::Uuid(id)) = entry.get("id") else {
             return Err(SettingsError::MissingOrInvalidField {
@@ -2420,7 +2545,7 @@ impl SettingUpdater for GuildTemplateShopExecutor {
             ctx.guild_id.to_string(),
             id
         )
-        .fetch_one(&ctx.data.data.pool)
+        .fetch_one(&ctx.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Failed to check if shop template exists: {:?}", e),
@@ -2466,7 +2591,7 @@ impl SettingUpdater for GuildTemplateShopExecutor {
             ctx.guild_id.to_string(),
             id
         )
-        .execute(&ctx.data.data.pool)
+        .execute(&ctx.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Failed to update shop template: {:?}", e),
@@ -2479,13 +2604,13 @@ impl SettingUpdater for GuildTemplateShopExecutor {
 }
 
 #[async_trait::async_trait]
-impl SettingDeleter for GuildTemplateShopExecutor {
+impl SettingDeleter<SettingsData> for GuildTemplateShopExecutor {
     async fn delete<'a>(
         &self,
-        ctx: HookContext<'a>,
-        primary_key: splashcore_rs::value::Value,
+        ctx: &SettingsData,
+        primary_key: Value,
     ) -> Result<(), SettingsError> {
-        check_perms(&ctx, "guild_templates_shop.delete".into()).await?;
+        check_perms(ctx, "guild_templates_shop.delete".into()).await?;
 
         let primary_key = match primary_key {
             Value::Uuid(id) => id,
@@ -2507,7 +2632,7 @@ impl SettingDeleter for GuildTemplateShopExecutor {
             ctx.guild_id.to_string(),
             primary_key
         )
-        .fetch_optional(&ctx.data.data.pool)
+        .fetch_optional(&ctx.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Error while fetching shop template: {}", e),
@@ -2527,7 +2652,7 @@ impl SettingDeleter for GuildTemplateShopExecutor {
             ctx.guild_id.to_string(),
             id
         )
-        .execute(&ctx.data.data.pool)
+        .execute(&ctx.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Failed to delete shop template: {:?}", e),
@@ -2539,7 +2664,7 @@ impl SettingDeleter for GuildTemplateShopExecutor {
     }
 }
 
-pub static GUILD_TEMPLATE_SHOP_PUBLIC_LIST: LazyLock<Setting> = LazyLock::new(|| {
+pub static GUILD_TEMPLATE_SHOP_PUBLIC_LIST: LazyLock<Setting<SettingsData>> = LazyLock::new(|| {
     Setting {
         id: "template_shop_public_list".to_string(),
         name: "Explore the shop!".to_string(),
@@ -2561,7 +2686,7 @@ pub static GUILD_TEMPLATE_SHOP_PUBLIC_LIST: LazyLock<Setting> = LazyLock::new(||
                 name: "Name".to_string(),
                 description: "The name of the template on the shop. Cannot be updated once set".to_string(),
                 column_type: ColumnType::new_scalar(InnerColumnType::String {
-                    kind: InnerColumnTypeStringKind::Normal {},
+                    kind: "normal".to_string(),
                     min_length: None,
                     max_length: Some(64),
                     allowed_values: vec![],
@@ -2576,7 +2701,7 @@ pub static GUILD_TEMPLATE_SHOP_PUBLIC_LIST: LazyLock<Setting> = LazyLock::new(||
                 name: "Version".to_string(),
                 description: "The version of the template. Cannot be updated once set".to_string(), 
                 column_type: ColumnType::new_scalar(InnerColumnType::String {
-                    kind: InnerColumnTypeStringKind::Normal {},
+                    kind: "normal".to_string(),
                     min_length: None,
                     max_length: Some(64),
                     allowed_values: vec![],
@@ -2591,7 +2716,7 @@ pub static GUILD_TEMPLATE_SHOP_PUBLIC_LIST: LazyLock<Setting> = LazyLock::new(||
                 name: "Description".to_string(),
                 description: "The description of the template".to_string(), 
                 column_type: ColumnType::new_scalar(InnerColumnType::String {
-                    kind: InnerColumnTypeStringKind::Normal {},
+                    kind: "normal".to_string(),
                     min_length: None,
                     max_length: Some(4096),
                     allowed_values: vec![],
@@ -2606,9 +2731,7 @@ pub static GUILD_TEMPLATE_SHOP_PUBLIC_LIST: LazyLock<Setting> = LazyLock::new(||
                 name: "Content".to_string(),
                 description: "The content of the template. Cannot be updated once set (use a new version for that)".to_string(),
                 column_type: ColumnType::new_scalar(InnerColumnType::String {
-                    kind: InnerColumnTypeStringKind::Textarea {
-                        ctx: "template".to_string(),
-                    },
+                    kind: "template".to_string(),
                     min_length: None,
                     max_length: None,
                     allowed_values: vec![],
@@ -2623,7 +2746,7 @@ pub static GUILD_TEMPLATE_SHOP_PUBLIC_LIST: LazyLock<Setting> = LazyLock::new(||
                 name: "Type".to_string(),
                 description: "The type of the template".to_string(),
                 column_type: ColumnType::new_scalar(InnerColumnType::String {
-                    kind: InnerColumnTypeStringKind::Normal {},
+                    kind: "normal".to_string(),
                     min_length: None,
                     max_length: None,
                     allowed_values: vec!["public".to_string(), "hidden".to_string()],
@@ -2648,14 +2771,14 @@ pub static GUILD_TEMPLATE_SHOP_PUBLIC_LIST: LazyLock<Setting> = LazyLock::new(||
 pub struct GuildTemplateShopPublicListExecutor;
 
 #[async_trait::async_trait]
-impl SettingView for GuildTemplateShopPublicListExecutor {
+impl SettingView<SettingsData> for GuildTemplateShopPublicListExecutor {
     async fn view<'a>(
         &self,
-        context: HookContext<'a>,
-        _filters: indexmap::IndexMap<String, splashcore_rs::value::Value>,
-    ) -> Result<Vec<indexmap::IndexMap<String, splashcore_rs::value::Value>>, SettingsError> {
+        context: &SettingsData,
+        _filters: indexmap::IndexMap<String, Value>,
+    ) -> Result<Vec<indexmap::IndexMap<String, Value>>, SettingsError> {
         let rows = sqlx::query!("SELECT id, name, version, description, type, owner_guild, created_at, created_by, last_updated_at, last_updated_by FROM template_shop WHERE type = 'public'")
-        .fetch_all(&context.data.data.pool)
+        .fetch_all(&context.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Error while fetching shop templates: {}", e),
@@ -2686,7 +2809,7 @@ impl SettingView for GuildTemplateShopPublicListExecutor {
     }
 }
 
-pub static LOCKDOWN_SETTINGS: LazyLock<Setting> = LazyLock::new(|| {
+pub static LOCKDOWN_SETTINGS: LazyLock<Setting<SettingsData>> = LazyLock::new(|| {
     Setting {
         id: "lockdown_guilds".to_string(),
         name: "Lockdown Settings".to_string(),
@@ -2703,7 +2826,7 @@ pub static LOCKDOWN_SETTINGS: LazyLock<Setting> = LazyLock::new(|| {
                 name: "Member Roles".to_string(),
                 description: "Which roles to use as member roles for the purpose of lockdown. These roles will be explicitly modified during lockdown".to_string(),
                 column_type: ColumnType::new_array(InnerColumnType::String {
-                    kind: InnerColumnTypeStringKind::Role {},
+                    kind: "role".to_string(),
                     min_length: None,
                     max_length: None,
                     allowed_values: vec![],
@@ -2729,7 +2852,7 @@ pub static LOCKDOWN_SETTINGS: LazyLock<Setting> = LazyLock::new(|| {
             ar_settings::common_columns::last_updated_by(),
         ]),
         title_template: "Lockdown Settings".to_string(),
-        operations: LockdownSettingsExecutor.into(),
+        operations: SettingOperations::from(LockdownSettingsExecutor),
     }
 });
 
@@ -2737,16 +2860,16 @@ pub static LOCKDOWN_SETTINGS: LazyLock<Setting> = LazyLock::new(|| {
 pub struct LockdownSettingsExecutor;
 
 #[async_trait]
-impl SettingView for LockdownSettingsExecutor {
+impl SettingView<SettingsData> for LockdownSettingsExecutor {
     async fn view<'a>(
         &self,
-        context: HookContext<'a>,
-        _filters: indexmap::IndexMap<String, splashcore_rs::value::Value>,
-    ) -> Result<Vec<indexmap::IndexMap<String, splashcore_rs::value::Value>>, SettingsError> {
-        check_perms(&context, "lockdown_settings.view".into()).await?;
+        context: &SettingsData,
+        _filters: indexmap::IndexMap<String, Value>,
+    ) -> Result<Vec<indexmap::IndexMap<String, Value>>, SettingsError> {
+        check_perms(context,"lockdown_settings.view".into()).await?;
 
         let rows = sqlx::query!("SELECT member_roles, require_correct_layout, created_at, created_by, last_updated_at, last_updated_by FROM lockdown__guilds WHERE guild_id = $1", context.guild_id.to_string())
-            .fetch_all(&context.data.data.pool)
+            .fetch_all(&context.data.pool)
             .await
             .map_err(|e| SettingsError::Generic {
                 message: format!("Error while fetching lockdowns: {}", e),
@@ -2775,15 +2898,15 @@ impl SettingView for LockdownSettingsExecutor {
 }
 
 #[async_trait]
-impl SettingCreator for LockdownSettingsExecutor {
+impl SettingCreator<SettingsData> for LockdownSettingsExecutor {
     async fn create<'a>(
         &self,
-        context: HookContext<'a>,
-        entry: indexmap::IndexMap<String, splashcore_rs::value::Value>,
-    ) -> Result<indexmap::IndexMap<String, splashcore_rs::value::Value>, SettingsError> {
-        check_perms(&context, "lockdown_settings.create".into()).await?;
+        context: &SettingsData,
+        entry: indexmap::IndexMap<String, Value>,
+    ) -> Result<indexmap::IndexMap<String, Value>, SettingsError> {
+        check_perms(context,"lockdown_settings.create".into()).await?;
 
-        let Some(splashcore_rs::value::Value::List(member_roles)) = entry.get("member_roles") else {
+        let Some(Value::List(member_roles)) = entry.get("member_roles") else {
             return Err(SettingsError::MissingOrInvalidField {
                 field: "member_roles".to_string(),
                 src: "lockdown_create_entry".to_string(),
@@ -2799,7 +2922,7 @@ impl SettingCreator for LockdownSettingsExecutor {
             }),
         }).collect::<Result<Vec<String>, SettingsError>>()?;
         
-        let Some(splashcore_rs::value::Value::Boolean(require_correct_layout)) = entry.get("require_correct_layout") else {
+        let Some(Value::Boolean(require_correct_layout)) = entry.get("require_correct_layout") else {
             return Err(SettingsError::MissingOrInvalidField {
                 field: "require_correct_layout".to_string(),
                 src: "lockdown_create_entry".to_string(),
@@ -2814,7 +2937,7 @@ impl SettingCreator for LockdownSettingsExecutor {
             context.author.to_string(),
             context.author.to_string(),
         )
-        .execute(&context.data.data.pool)
+        .execute(&context.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Error while creating lockdown settings: {}", e),
@@ -2827,15 +2950,15 @@ impl SettingCreator for LockdownSettingsExecutor {
 }
 
 #[async_trait]
-impl SettingUpdater for LockdownSettingsExecutor {
+impl SettingUpdater<SettingsData> for LockdownSettingsExecutor {
     async fn update<'a>(
         &self,
-        context: HookContext<'a>,
-        entry: indexmap::IndexMap<String, splashcore_rs::value::Value>,
-    ) -> Result<indexmap::IndexMap<String, splashcore_rs::value::Value>, SettingsError> {
-        check_perms(&context, "lockdown_settings.uodate".into()).await?;
+        context: &SettingsData,
+        entry: indexmap::IndexMap<String, Value>,
+    ) -> Result<indexmap::IndexMap<String, Value>, SettingsError> {
+        check_perms(context,"lockdown_settings.uodate".into()).await?;
 
-        let Some(splashcore_rs::value::Value::List(member_roles)) = entry.get("member_roles") else {
+        let Some(Value::List(member_roles)) = entry.get("member_roles") else {
             return Err(SettingsError::MissingOrInvalidField {
                 field: "member_roles".to_string(),
                 src: "lockdown_create_entry".to_string(),
@@ -2851,7 +2974,7 @@ impl SettingUpdater for LockdownSettingsExecutor {
             }),
         }).collect::<Result<Vec<String>, SettingsError>>()?;
         
-        let Some(splashcore_rs::value::Value::Boolean(require_correct_layout)) = entry.get("require_correct_layout") else {
+        let Some(Value::Boolean(require_correct_layout)) = entry.get("require_correct_layout") else {
             return Err(SettingsError::MissingOrInvalidField {
                 field: "require_correct_layout".to_string(),
                 src: "lockdown_create_entry".to_string(),
@@ -2862,7 +2985,7 @@ impl SettingUpdater for LockdownSettingsExecutor {
             "SELECT COUNT(*) FROM lockdown__guilds WHERE guild_id = $1",
             context.guild_id.to_string(),
         )
-        .fetch_one(&context.data.data.pool)
+        .fetch_one(&context.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Error while updating lockdown settings: {}", e),
@@ -2883,7 +3006,7 @@ impl SettingUpdater for LockdownSettingsExecutor {
             require_correct_layout,
             context.author.to_string(),
         )
-        .execute(&context.data.data.pool)
+        .execute(&context.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Error while creating lockdown settings: {}", e),
@@ -2896,16 +3019,16 @@ impl SettingUpdater for LockdownSettingsExecutor {
 }
 
 #[async_trait]
-impl SettingDeleter for LockdownSettingsExecutor {
+impl SettingDeleter<SettingsData> for LockdownSettingsExecutor {
     async fn delete<'a>(
         &self,
-        context: HookContext<'a>,
-        _primary_key: splashcore_rs::value::Value,
+        context: &SettingsData,
+        _primary_key: Value,
     ) -> Result<(), SettingsError> {
-        check_perms(&context, "lockdown_settings.delete".into()).await?;
+        check_perms(context,"lockdown_settings.delete".into()).await?;
 
         sqlx::query!("DELETE FROM lockdown__guilds WHERE guild_id = $1", context.guild_id.to_string())
-            .execute(&context.data.data.pool)
+            .execute(&context.data.pool)
             .await
             .map_err(|e| SettingsError::Generic {
                 message: format!("Error while deleting lockdown settings: {}", e),
@@ -2917,7 +3040,7 @@ impl SettingDeleter for LockdownSettingsExecutor {
     }
 }
 
-pub static LOCKDOWNS: LazyLock<Setting> = LazyLock::new(|| Setting {
+pub static LOCKDOWNS: LazyLock<Setting<SettingsData>> = LazyLock::new(|| Setting {
     id: "lockdowns".to_string(),
     name: "Lockdowns".to_string(),
     description: "Lockdowns".to_string(),
@@ -2943,7 +3066,7 @@ pub static LOCKDOWNS: LazyLock<Setting> = LazyLock::new(|| Setting {
             name: "Type".to_string(),
             description: "The type of the lockdown.".to_string(),
             column_type: ColumnType::new_scalar(InnerColumnType::String {
-                kind: InnerColumnTypeStringKind::Normal {},
+                kind: "normal".to_string(),
                 min_length: Some(1),
                 max_length: Some(256),
                 allowed_values: vec![],
@@ -2968,7 +3091,7 @@ pub static LOCKDOWNS: LazyLock<Setting> = LazyLock::new(|| Setting {
             name: "Reason".to_string(),
             description: "The reason for starting the lockdown.".to_string(),
             column_type: ColumnType::new_scalar(InnerColumnType::String {
-                kind: InnerColumnTypeStringKind::Normal {},
+                kind: "normal".to_string(),
                 min_length: Some(1),
                 max_length: Some(256),
                 allowed_values: vec![],
@@ -2988,16 +3111,16 @@ pub static LOCKDOWNS: LazyLock<Setting> = LazyLock::new(|| Setting {
 pub struct LockdownExecutor;
 
 #[async_trait]
-impl SettingView for LockdownExecutor {
+impl SettingView<SettingsData> for LockdownExecutor {
     async fn view<'a>(
         &self,
-        context: HookContext<'a>,
-        _filters: indexmap::IndexMap<String, splashcore_rs::value::Value>,
-    ) -> Result<Vec<indexmap::IndexMap<String, splashcore_rs::value::Value>>, SettingsError> {
-        check_perms(&context, "lockdowns.view".into()).await?;
+        context: &SettingsData,
+        _filters: indexmap::IndexMap<String, Value>,
+    ) -> Result<Vec<indexmap::IndexMap<String, Value>>, SettingsError> {
+        check_perms(context,"lockdowns.view".into()).await?;
 
         let rows = sqlx::query!("SELECT id, data, type, reason, created_at FROM lockdown__guild_lockdowns WHERE guild_id = $1", context.guild_id.to_string())
-            .fetch_all(&context.data.data.pool)
+            .fetch_all(&context.data.pool)
             .await
             .map_err(|e| SettingsError::Generic {
                 message: format!("Error while fetching lockdowns: {}", e),
@@ -3025,22 +3148,22 @@ impl SettingView for LockdownExecutor {
 }
 
 #[async_trait]
-impl SettingCreator for LockdownExecutor {
+impl SettingCreator<SettingsData> for LockdownExecutor {
     async fn create<'a>(
         &self,
-        context: HookContext<'a>,
-        entry: indexmap::IndexMap<String, splashcore_rs::value::Value>,
-    ) -> Result<indexmap::IndexMap<String, splashcore_rs::value::Value>, SettingsError> {
-        check_perms(&context, "lockdowns.create".into()).await?;
+        context: &SettingsData,
+        entry: indexmap::IndexMap<String, Value>,
+    ) -> Result<indexmap::IndexMap<String, Value>, SettingsError> {
+        check_perms(context,"lockdowns.create".into()).await?;
     
-        let Some(splashcore_rs::value::Value::String(typ)) = entry.get("type") else {
+        let Some(Value::String(typ)) = entry.get("type") else {
             return Err(SettingsError::MissingOrInvalidField {
                 field: "type".to_string(),
                 src: "lockdown_create_entry".to_string(),
             });
         };
 
-        let Some(splashcore_rs::value::Value::String(reason)) = entry.get("reason") else {
+        let Some(Value::String(reason)) = entry.get("reason") else {
             return Err(SettingsError::MissingOrInvalidField {
                 field: "reason".to_string(),
                 src: "lockdown_create_entry".to_string(),
@@ -3048,7 +3171,7 @@ impl SettingCreator for LockdownExecutor {
         };
 
         // Get the current lockdown set
-        let mut lockdowns = lockdowns::LockdownSet::guild(context.guild_id, &context.data.data.pool)
+        let mut lockdowns = lockdowns::LockdownSet::guild(context.guild_id, &context.data.pool)
             .await
             .map_err(|e| SettingsError::Generic {
                 message: format!("Error while fetching lockdown set: {}", e),
@@ -3078,10 +3201,10 @@ impl SettingCreator for LockdownExecutor {
         })?;
 
         let lockdown_data = lockdowns::LockdownData {
-            cache: &context.data.serenity_context.cache,
-            http: &context.data.serenity_context.http,
-            pool: context.data.data.pool.clone(),
-            reqwest: context.data.data.reqwest.clone(),
+            cache: &context.serenity_context.cache,
+            http: &context.serenity_context.http,
+            pool: context.data.pool.clone(),
+            reqwest: context.data.reqwest.clone(),
         };
 
         lockdowns
@@ -3103,18 +3226,24 @@ impl SettingCreator for LockdownExecutor {
                 typ: "value_error".to_string(),
             })?;
         
-        Ok(created_lockdown.to_map())
+
+        Ok(indexmap::indexmap! {
+            "id".to_string() => Value::Uuid(created_lockdown.id),
+            "reason".to_string() => Value::String(created_lockdown.reason.clone()),
+            "type".to_string() => Value::String(created_lockdown.r#type.string_form()),
+            "data".to_string() => Value::from_json(&created_lockdown.data),
+        })
     }
 }
 
 #[async_trait]
-impl SettingDeleter for LockdownExecutor {
+impl SettingDeleter<SettingsData> for LockdownExecutor {
     async fn delete<'a>(
         &self,
-        context: HookContext<'a>,
-        primary_key: splashcore_rs::value::Value,
+        context: &SettingsData,
+        primary_key: Value,
     ) -> Result<(), SettingsError> {
-        check_perms(&context, "lockdowns.delete".into()).await?;
+        check_perms(context,"lockdowns.delete".into()).await?;
                 
         let primary_key = match primary_key {
             Value::Uuid(primary_key) => primary_key,
@@ -3135,7 +3264,7 @@ impl SettingDeleter for LockdownExecutor {
         };
 
         // Get the current lockdown set
-        let mut lockdowns = lockdowns::LockdownSet::guild(context.guild_id, &context.data.data.pool)
+        let mut lockdowns = lockdowns::LockdownSet::guild(context.guild_id, &context.data.pool)
             .await
             .map_err(|e| SettingsError::Generic {
                 message: format!("Error while fetching lockdown set: {}", e),
@@ -3144,10 +3273,10 @@ impl SettingDeleter for LockdownExecutor {
             })?;
 
         let lockdown_data = lockdowns::LockdownData {
-            cache: &context.data.serenity_context.cache,
-            http: &context.data.serenity_context.http,
-            pool: context.data.data.pool.clone(),
-            reqwest: context.data.data.reqwest.clone(),
+            cache: &context.serenity_context.cache,
+            http: &context.serenity_context.http,
+            pool: context.data.pool.clone(),
+            reqwest: context.data.reqwest.clone(),
         };        
 
         // Remove the lockdown

@@ -1,6 +1,6 @@
 pub mod canonical;
-pub mod helpers;
 pub mod permission_checks;
+pub mod settings;
 
 use silverpelt::data::Data;
 

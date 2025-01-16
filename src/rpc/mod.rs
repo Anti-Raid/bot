@@ -320,9 +320,7 @@ pub(crate) async fn settings_operation(
         OperationType::View => {
             match ar_settings::cfg::settings_view(
                 &setting,
-                &crate::botlib::helpers::settings_data(serenity_context),
-                guild_id,
-                user_id,
+                &crate::botlib::settings::settings_data(serenity_context, guild_id, user_id),
                 req.fields,
             )
             .await
@@ -334,9 +332,7 @@ pub(crate) async fn settings_operation(
         OperationType::Create => {
             match ar_settings::cfg::settings_create(
                 &setting,
-                &crate::botlib::helpers::settings_data(serenity_context),
-                guild_id,
-                user_id,
+                &crate::botlib::settings::settings_data(serenity_context, guild_id, user_id),
                 req.fields,
             )
             .await
@@ -348,9 +344,7 @@ pub(crate) async fn settings_operation(
         OperationType::Update => {
             match ar_settings::cfg::settings_update(
                 &setting,
-                &crate::botlib::helpers::settings_data(serenity_context),
-                guild_id,
-                user_id,
+                &crate::botlib::settings::settings_data(serenity_context, guild_id, user_id),
                 req.fields,
             )
             .await
@@ -371,9 +365,7 @@ pub(crate) async fn settings_operation(
 
             match ar_settings::cfg::settings_delete(
                 &setting,
-                &crate::botlib::helpers::settings_data(serenity_context),
-                guild_id,
-                user_id,
+                &crate::botlib::settings::settings_data(serenity_context, guild_id, user_id),
                 pkey.clone(),
             )
             .await

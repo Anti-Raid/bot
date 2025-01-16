@@ -1,3 +1,5 @@
+use crate::botlib::settings::SettingsData;
+
 mod backups;
 mod help;
 mod load;
@@ -217,7 +219,7 @@ pub fn raw_commands() -> Vec<(
     ]
 }
 
-pub fn config_options() -> Vec<ar_settings::types::Setting> {
+pub fn config_options() -> Vec<ar_settings::types::Setting<SettingsData>> {
     vec![
         (*settings::GUILD_ROLES).clone(),
         (*settings::GUILD_MEMBERS).clone(),

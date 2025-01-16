@@ -1,5 +1,8 @@
+use ar_settings::value::Value;
 use serde::{Deserialize, Serialize};
 use serenity::all::{GuildChannel, Permissions, Role, RoleId};
+
+use crate::botlib::settings::SettingsData;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct GuildChannelWithPermissions {
@@ -37,7 +40,7 @@ pub struct CheckCommandPermissionRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum CanonicalSettingsResult {
     Ok {
-        fields: Vec<indexmap::IndexMap<String, splashcore_rs::value::Value>>,
+        fields: Vec<indexmap::IndexMap<String, Value>>,
     },
     Err {
         error: ar_settings::types::SettingsError,
@@ -46,7 +49,7 @@ pub enum CanonicalSettingsResult {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SettingsOperationRequest {
-    pub fields: indexmap::IndexMap<String, splashcore_rs::value::Value>,
+    pub fields: indexmap::IndexMap<String, Value>,
     pub op: ar_settings::types::OperationType,
     pub setting: String,
 }
@@ -71,6 +74,6 @@ pub struct CheckUserHasKittycatPermissionsRequest {
 #[derive(Serialize, Deserialize)]
 pub struct BotState {
     pub commands: Vec<crate::botlib::canonical::CanonicalCommand>,
-    pub settings: Vec<ar_settings::types::Setting>,
+    pub settings: Vec<ar_settings::types::Setting<SettingsData>>,
     pub command_permissions: crate::botlib::CommandPermissionMetadata,
 }
