@@ -160,14 +160,24 @@ pub async fn load(
     };
 
     if confirm.data.custom_id != "yes" {
+        confirm
+            .create_response(
+                ctx.http(),
+                serenity::all::CreateInteractionResponse::Message(
+                    serenity::all::CreateInteractionResponseMessage::new()
+                        .content("Cancelled successfully!"),
+                ),
+            )
+            .await?;
         return Ok(());
     }
 
     // Add template to servers list of templates
+    let name = silverpelt::templates::create_shop_template(&template_name, &version);
     sqlx::query!(
         "INSERT INTO guild_templates (guild_id, name, content, events, allowed_caps, error_channel, created_by, last_updated_by) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
         guild_id.to_string(),
-        silverpelt::templates::create_shop_template(&template_name, &version),
+        &name,
         "".to_string(),
         &events,
         &allowed_caps,
@@ -182,8 +192,20 @@ pub async fn load(
     .await
     .map_err(|e| format!("Failed to add template to guild: {:?}", e))?;
 
-    ctx.send(poise::CreateReply::new().content("Template loaded successfully!"))
-        .await?;
+    // Dispatch a OnStartup event for the template
+    silverpelt::ar_event::AntiraidEvent::OnStartup(vec![name])
+        .dispatch_to_template_worker_and_nowait(&ctx.data(), guild_id)
+        .await
+        .map_err(|e| format!("Failed to dispatch OnStartup event: {:?}", e))?;
 
+    confirm
+        .create_response(
+            ctx.http(),
+            serenity::all::CreateInteractionResponse::Message(
+                serenity::all::CreateInteractionResponseMessage::new()
+                    .content("AntiRaid template loaded successfully!"),
+            ),
+        )
+        .await?;
     Ok(())
 }

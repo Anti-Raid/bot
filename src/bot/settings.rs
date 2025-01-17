@@ -7,6 +7,7 @@ use ar_settings::types::{
 };
 use kittycat::perms::Permission;
 use ar_settings::value::Value;
+use silverpelt::ar_event::{ExternalKeyUpdateEventData, ExternalKeyUpdateEventDataAction};
 use std::sync::LazyLock;
 use async_trait::async_trait;
 use crate::botlib::settings::SettingsData;
@@ -1987,6 +1988,20 @@ impl SettingCreator<SettingsData> for GuildTemplatesKVExecutor {
             typ: "internal".to_string(),
         })?;
 
+        // Dispatch a ExternalKeyUpdate event for the template
+        silverpelt::ar_event::AntiraidEvent::ExternalKeyUpdate(ExternalKeyUpdateEventData {
+            key_modified: key.to_string(),
+            author: ctx.author,
+            action: ExternalKeyUpdateEventDataAction::Create
+        })
+        .dispatch_to_template_worker_and_nowait(&ctx.data, ctx.guild_id)
+        .await
+        .map_err(|e| SettingsError::Generic {
+            message: format!("Failed to dispatch ExternalKeyUpdate event: {:?}", e),
+            src: "GuildTemplatesKVExecutor".to_string(),
+            typ: "internal".to_string(),
+        })?;
+
         Ok(entry)
     }
 }
@@ -2024,6 +2039,20 @@ impl SettingUpdater<SettingsData> for GuildTemplatesKVExecutor {
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Failed to update kv: {:?}", e),
+            src: "GuildTemplatesKVExecutor".to_string(),
+            typ: "internal".to_string(),
+        })?;
+
+    // Dispatch a ExternalKeyUpdate event for the template
+    silverpelt::ar_event::AntiraidEvent::ExternalKeyUpdate(ExternalKeyUpdateEventData {
+        key_modified: key.to_string(),
+        author: ctx.author,
+        action: ExternalKeyUpdateEventDataAction::Update
+    })
+        .dispatch_to_template_worker_and_nowait(&ctx.data, ctx.guild_id)
+        .await
+        .map_err(|e| SettingsError::Generic {
+            message: format!("Failed to dispatch ExternalKeyUpdate event: {:?}", e),
             src: "GuildTemplatesKVExecutor".to_string(),
             typ: "internal".to_string(),
         })?;
@@ -2071,6 +2100,20 @@ impl SettingDeleter<SettingsData> for GuildTemplatesKVExecutor {
         .await
         .map_err(|e| SettingsError::Generic {
             message: format!("Failed to delete kv: {:?}", e),
+            src: "GuildTemplatesKVExecutor".to_string(),
+            typ: "internal".to_string(),
+        })?;
+
+        // Dispatch a ExternalKeyUpdate event for the template
+        silverpelt::ar_event::AntiraidEvent::ExternalKeyUpdate(ExternalKeyUpdateEventData {
+            key_modified: primary_key.to_string(),
+            author: ctx.author,
+            action: ExternalKeyUpdateEventDataAction::Delete
+        })
+        .dispatch_to_template_worker_and_nowait(&ctx.data, ctx.guild_id)
+        .await
+        .map_err(|e| SettingsError::Generic {
+            message: format!("Failed to dispatch ExternalKeyUpdate event: {:?}", e),
             src: "GuildTemplatesKVExecutor".to_string(),
             typ: "internal".to_string(),
         })?;
