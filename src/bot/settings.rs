@@ -2262,7 +2262,7 @@ impl SettingView<SettingsData> for GuildTemplateShopExecutor {
     ) -> Result<Vec<indexmap::IndexMap<String, Value>>, SettingsError> {
         check_perms(context,"guild_templates_shop.view".into()).await?;
 
-        let rows = sqlx::query!("SELECT id, name, friendly_name, language, allowed_caps, version, description, type, events, created_at, created_by, last_updated_at, last_updated_by FROM template_shop WHERE owner_guild = $1", context.guild_id.to_string())
+        let rows = sqlx::query!("SELECT id, name, friendly_name, language, allowed_caps, version, description, content, type, events, created_at, created_by, last_updated_at, last_updated_by FROM template_shop WHERE owner_guild = $1", context.guild_id.to_string())
         .fetch_all(&context.data.pool)
         .await
         .map_err(|e| SettingsError::Generic {
@@ -2285,6 +2285,7 @@ impl SettingView<SettingsData> for GuildTemplateShopExecutor {
                 "version".to_string() => Value::String(row.version),
                 "description".to_string() => Value::String(row.description),
                 "type".to_string() => Value::String(row.r#type),
+                "content".to_string() => Value::String(row.content),
                 "events".to_string() => {
                     Value::List(row.events.iter().map(|x| Value::String(x.to_string())).collect())
                 },
