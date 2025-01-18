@@ -7,7 +7,7 @@ pub async fn load_autocomplete<'a>(
     let data = ctx.data();
 
     match sqlx::query!(
-        "SELECT id, name, friendly_name FROM template_shop WHERE name ILIKE $1 OR friendly_name ILIKE $1",
+        "SELECT DISTINCT name, friendly_name FROM template_shop WHERE name ILIKE $1 OR friendly_name ILIKE $1",
         format!("%{}%", partial.replace('%', "\\%").replace('_', "\\_")),
     )
     .fetch_all(&data.pool)
@@ -17,7 +17,7 @@ pub async fn load_autocomplete<'a>(
 
             for template in templates {
                 choices = choices.add_choice(serenity::all::AutocompleteChoice::new(
-                    format!("{} | {}", template.friendly_name, template.id),
+                    format!("{} | {}", template.friendly_name, template.name),
                     template.name,
                 ));
             }
