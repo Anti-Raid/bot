@@ -1,5 +1,42 @@
 use crate::{Context, Error};
 
+pub async fn lockdown_autocomplete<'a>(
+    ctx: crate::Context<'_>,
+    partial: &str,
+) -> serenity::all::CreateAutocompleteResponse<'a> {
+    let data = ctx.data();
+
+    let Some(guild_id) = ctx.guild_id() else {
+        return serenity::builder::CreateAutocompleteResponse::new();
+    };
+
+    match sqlx::query!(
+        "SELECT id, type FROM lockdown__guild_lockdowns WHERE guild_id = $1 AND type ILIKE $2",
+        guild_id.to_string(),
+        format!("%{}%", partial.replace('%', "\\%").replace('_', "\\_")),
+    )
+    .fetch_all(&data.pool)
+    .await
+    {
+        Ok(lockdowns) => {
+            let mut choices = serenity::all::CreateAutocompleteResponse::new();
+
+            for lockdown in lockdowns {
+                choices = choices.add_choice(serenity::all::AutocompleteChoice::new(
+                    lockdown.r#type,
+                    lockdown.id.to_string(),
+                ));
+            }
+
+            choices
+        }
+        Err(e) => {
+            log::error!("Failed to fetch lockdowns: {:?}", e);
+            serenity::builder::CreateAutocompleteResponse::new()
+        }
+    }
+}
+
 /// Lockdowns
 #[poise::command(
     slash_command,
@@ -211,7 +248,10 @@ pub async fn lockdowns_role(
 
 #[poise::command(slash_command, guild_only, rename = "remove")]
 /// Remove a lockdown by ID
-pub async fn lockdowns_remove(ctx: Context<'_>, id: String) -> Result<(), Error> {
+pub async fn lockdowns_remove(
+    ctx: Context<'_>,
+    #[autocomplete = "lockdown_autocomplete"] id: String,
+) -> Result<(), Error> {
     let Some(guild_id) = ctx.guild_id() else {
         return Err("This command can only be used in a guild".into());
     };
