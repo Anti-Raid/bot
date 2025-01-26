@@ -31,7 +31,7 @@ pub async fn load_autocomplete<'a>(
     }
 }
 
-/// Adds a protection template from the shop to your server
+/// Loads an Anti-Raid template/module
 #[poise::command(prefix_command, track_edits, slash_command)]
 pub async fn load(
     ctx: crate::Context<'_>,
@@ -98,8 +98,9 @@ pub async fn load(
                     CreateEmbed::default()
                         .title("Load Template?")
                         .description(format!(
-                            "Are you sure you want to load the template `{}`, version `{}`, language `{}`?",
-                            template_name, version, language
+                            "Are you sure you want to load the template `{} v{}`?",
+                            template_name.replace('`', "\\`"),
+                            version.replace('`', "\\`")
                         ))
                         .field(
                             "Description",
@@ -119,23 +120,34 @@ pub async fn load(
                             },
                             false,
                         )
-                        .field("Events", {
-                            let events_str = events.join(", ");
-                            if events_str.len() > 300 {
-                                format!("{}...", &events_str[..300])
-                            } else {
-                                events_str
-                            }
-                        }, false)
-                        .field("Capabilities", {
-                            let allowed_caps_str = allowed_caps.join(", ");
-                            if allowed_caps_str.len() > 300 {
-                                format!("{}...", &allowed_caps_str[..300])
-                            } else {
-                                allowed_caps_str
-                            }
-                        }, false),
-
+                        .field(
+                            "Events",
+                            {
+                                let events_str = events
+                                    .iter()
+                                    .map(|e| e.to_lowercase())
+                                    .collect::<Vec<_>>()
+                                    .join(", ");
+                                if events_str.len() > 300 {
+                                    format!("``{}...``", &events_str[..300])
+                                } else {
+                                    format!("``{}``", events_str)
+                                }
+                            },
+                            false,
+                        )
+                        .field(
+                            "Capabilities",
+                            {
+                                let allowed_caps_str = allowed_caps.join(", ");
+                                if allowed_caps_str.len() > 300 {
+                                    format!("``{}...``", &allowed_caps_str[..300])
+                                } else {
+                                    format!("``{}``", allowed_caps_str)
+                                }
+                            },
+                            false,
+                        ),
                 )
                 .components(vec![CreateActionRow::buttons(vec![
                     CreateButton::new("yes")

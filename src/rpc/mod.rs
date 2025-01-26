@@ -8,7 +8,7 @@ use axum::{
 };
 use std::sync::Arc;
 
-use ar_settings::{self, types::OperationType, types::SettingsError};
+use ar_settings::{self, types::OperationType};
 use types::{CanonicalSettingsResult, SettingsOperationRequest};
 
 type Response<T> = Result<Json<T>, (StatusCode, String)>;
@@ -308,11 +308,7 @@ pub(crate) async fn settings_operation(
 
     let Some(setting) = setting else {
         return Json(CanonicalSettingsResult::Err {
-            error: SettingsError::Generic {
-                message: "Setting not found".to_string(),
-                src: "SettingsOperationCore".to_string(),
-                typ: "client".to_string(),
-            },
+            error: "Setting not found".to_string(),
         });
     };
 
@@ -326,7 +322,9 @@ pub(crate) async fn settings_operation(
             .await
             {
                 Ok(res) => Json(CanonicalSettingsResult::Ok { fields: res }),
-                Err(e) => Json(CanonicalSettingsResult::Err { error: e }),
+                Err(e) => Json(CanonicalSettingsResult::Err {
+                    error: e.to_string(),
+                }),
             }
         }
         OperationType::Create => {
@@ -338,7 +336,9 @@ pub(crate) async fn settings_operation(
             .await
             {
                 Ok(res) => Json(CanonicalSettingsResult::Ok { fields: vec![res] }),
-                Err(e) => Json(CanonicalSettingsResult::Err { error: e }),
+                Err(e) => Json(CanonicalSettingsResult::Err {
+                    error: e.to_string(),
+                }),
             }
         }
         OperationType::Update => {
@@ -350,16 +350,15 @@ pub(crate) async fn settings_operation(
             .await
             {
                 Ok(res) => Json(CanonicalSettingsResult::Ok { fields: vec![res] }),
-                Err(e) => Json(CanonicalSettingsResult::Err { error: e }),
+                Err(e) => Json(CanonicalSettingsResult::Err {
+                    error: e.to_string(),
+                }),
             }
         }
         OperationType::Delete => {
             let Some(pkey) = req.fields.get(&setting.primary_key) else {
                 return Json(CanonicalSettingsResult::Err {
-                    error: SettingsError::MissingOrInvalidField {
-                        field: setting.primary_key.to_string(),
-                        src: "SettingsOperation".to_string(),
-                    },
+                    error: format!("Missing or invalid field: `{}`", setting.primary_key),
                 });
             };
 
@@ -371,7 +370,9 @@ pub(crate) async fn settings_operation(
             .await
             {
                 Ok(_res) => Json(CanonicalSettingsResult::Ok { fields: vec![] }),
-                Err(e) => Json(CanonicalSettingsResult::Err { error: e }),
+                Err(e) => Json(CanonicalSettingsResult::Err {
+                    error: e.to_string(),
+                }),
             }
         }
     }

@@ -1,5 +1,5 @@
-use ar_settings::value::Value;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use serenity::all::{GuildChannel, Permissions, Role, RoleId};
 
 use crate::botlib::settings::SettingsData;
@@ -43,7 +43,7 @@ pub enum CanonicalSettingsResult {
         fields: Vec<indexmap::IndexMap<String, Value>>,
     },
     Err {
-        error: ar_settings::types::SettingsError,
+        error: String,
     },
 }
 
