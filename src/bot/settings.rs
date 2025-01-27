@@ -850,6 +850,7 @@ impl SettingView<SettingsData> for GuildMembersExecutor {
 
         for row in rows {
             let map = indexmap::indexmap! {
+                "guild_id".to_string() => Value::String(context.guild_id.to_string()),
                 "user_id".to_string() => Value::String(row.user_id),
                 "perm_overrides".to_string() => Value::Array(row.perm_overrides.iter().map(|x| Value::String(x.to_string())).collect()),
                 "public".to_string() => Value::Bool(row.public),
@@ -1507,8 +1508,8 @@ pub static GUILD_TEMPLATES_KV: LazyLock<Setting<SettingsData>> = LazyLock::new(|
         },
         Column {
             id: "value".to_string(),
-            name: "Content".to_string(),
-            description: "The content of the template".to_string(),
+            name: "Value".to_string(),
+            description: "The value of the record".to_string(),
             column_type: ColumnType::new_scalar(InnerColumnType::Json {
                 max_bytes: Some(silverpelt::templates::LuaKVConstraints::default().max_value_bytes),
             }),
@@ -1545,6 +1546,7 @@ impl SettingView<SettingsData> for GuildTemplatesKVExecutor {
 
         for row in rows {
             let map = indexmap::indexmap! {
+                "guild_id".to_string() => Value::String(context.guild_id.to_string()),
                 "key".to_string() => Value::String(row.key),
                 "value".to_string() => row.value.unwrap_or(Value::Null),
                 "created_at".to_string() => Value::String(row.created_at.to_string()),
@@ -1892,7 +1894,7 @@ pub static GUILD_TEMPLATE_SHOP: LazyLock<Setting<SettingsData>> = LazyLock::new(
             ar_settings::common_columns::last_updated_at(),
             ar_settings::common_columns::last_updated_by(),
         ]),
-        title_template: "{name}".to_string(),
+        title_template: "{name}#{version}".to_string(),
         operations: SettingOperations::from(GuildTemplateShopExecutor),
     }
 });
@@ -2275,21 +2277,6 @@ pub static GUILD_TEMPLATE_SHOP_PUBLIC_LIST: LazyLock<Setting<SettingsData>> = La
                 secret: false,
             },
             Column {
-                id: "content".to_string(),
-                name: "Content".to_string(),
-                description: "The content of the template. Cannot be updated once set (use a new version for that)".to_string(),
-                column_type: ColumnType::new_scalar(InnerColumnType::String {
-                    kind: "template".to_string(),
-                    min_length: None,
-                    max_length: None,
-                    allowed_values: vec![],
-                }),
-                nullable: false,
-                suggestions: ColumnSuggestion::None {},
-                ignored_for: vec![OperationType::Update, OperationType::View],
-                secret: false,
-            },
-            Column {
                 id: "type".to_string(),
                 name: "Type".to_string(),
                 description: "The type of the template".to_string(),
@@ -2304,7 +2291,7 @@ pub static GUILD_TEMPLATE_SHOP_PUBLIC_LIST: LazyLock<Setting<SettingsData>> = La
                 ignored_for: vec![],
                 secret: false,
             },
-            ar_settings::common_columns::guild_id("owner_guild", "Guild ID", "The Guild ID"),
+            ar_settings::common_columns::guild_id("owner_guild", "Guild ID", "The ID of the server which owns the templaye"),
             ar_settings::common_columns::created_at(),
             ar_settings::common_columns::created_by(),
             ar_settings::common_columns::last_updated_at(),
