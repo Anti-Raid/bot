@@ -7,7 +7,8 @@ use ar_settings::types::{
 };
 use kittycat::perms::Permission;
 use serde_json::Value;
-use silverpelt::ar_event::{ExternalKeyUpdateEventData, ExternalKeyUpdateEventDataAction};
+use antiraid_types::ar_event::{AntiraidEvent, ExternalKeyUpdateEventData, ExternalKeyUpdateEventDataAction};
+use silverpelt::ar_event::AntiraidEventOperations;
 use std::sync::LazyLock;
 use async_trait::async_trait;
 use crate::botlib::settings::SettingsData;
@@ -1028,7 +1029,7 @@ pub static GUILD_TEMPLATES: LazyLock<Setting<SettingsData>> = LazyLock::new(|| {
                     min_length: None, 
                     max_length: None, 
                     allowed_values: {
-                        let mut vec = silverpelt::ar_event::AntiraidEvent::variant_names()
+                        let mut vec = AntiraidEvent::variant_names()
                         .iter()
                         .map(|x| x.to_string())
                         .collect::<Vec<String>>();
@@ -1189,7 +1190,7 @@ impl GuildTemplateExecutor {
 
     async fn post_action(&self, ctx: &SettingsData, name: &str) -> Result<(), Error> {
         // Dispatch a OnStartup event for the template
-        silverpelt::ar_event::AntiraidEvent::OnStartup(vec![name.to_string()])
+        AntiraidEvent::OnStartup(vec![name.to_string()])
             .dispatch_to_template_worker_and_nowait(&ctx.data, ctx.guild_id)
             .await
             .map_err(|e| format!("Failed to dispatch OnStartup event: {:?}", e))?;
@@ -1619,7 +1620,7 @@ impl SettingCreator<SettingsData> for GuildTemplatesKVExecutor {
         .map_err(|e| format!("Failed to insert kv: {:?}", e))?;
 
         // Dispatch a ExternalKeyUpdate event for the template
-        silverpelt::ar_event::AntiraidEvent::ExternalKeyUpdate(ExternalKeyUpdateEventData {
+        AntiraidEvent::ExternalKeyUpdate(ExternalKeyUpdateEventData {
             key_modified: key.to_string(),
             author: ctx.author,
             action: ExternalKeyUpdateEventDataAction::Create
@@ -1660,7 +1661,7 @@ impl SettingUpdater<SettingsData> for GuildTemplatesKVExecutor {
         .map_err(|e| format!("Failed to update kv: {:?}", e))?;
 
     // Dispatch a ExternalKeyUpdate event for the template
-    silverpelt::ar_event::AntiraidEvent::ExternalKeyUpdate(ExternalKeyUpdateEventData {
+    AntiraidEvent::ExternalKeyUpdate(ExternalKeyUpdateEventData {
         key_modified: key.to_string(),
         author: ctx.author,
         action: ExternalKeyUpdateEventDataAction::Update
@@ -1707,7 +1708,7 @@ impl SettingDeleter<SettingsData> for GuildTemplatesKVExecutor {
         .map_err(|e| format!("Failed to delete kv: {:?}", e))?;
 
         // Dispatch a ExternalKeyUpdate event for the template
-        silverpelt::ar_event::AntiraidEvent::ExternalKeyUpdate(ExternalKeyUpdateEventData {
+        AntiraidEvent::ExternalKeyUpdate(ExternalKeyUpdateEventData {
             key_modified: primary_key.to_string(),
             author: ctx.author,
             action: ExternalKeyUpdateEventDataAction::Delete
@@ -1841,7 +1842,7 @@ pub static GUILD_TEMPLATE_SHOP: LazyLock<Setting<SettingsData>> = LazyLock::new(
                     min_length: None,
                     max_length: None,
                     allowed_values: {
-                        let mut vec = silverpelt::ar_event::AntiraidEvent::variant_names()
+                        let mut vec = AntiraidEvent::variant_names()
                         .iter()
                         .map(|x| x.to_string())
                         .collect::<Vec<String>>();

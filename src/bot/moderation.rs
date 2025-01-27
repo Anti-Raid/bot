@@ -1,5 +1,6 @@
 use crate::Context;
 use antiraid_types::{
+    ar_event::{AntiraidEvent, ModerationAction, ModerationEndEventData, ModerationStartEventData},
     punishments::{PunishmentCreate, PunishmentState, PunishmentTarget},
     stings::{StingCreate, StingState, StingTarget},
 };
@@ -11,6 +12,7 @@ use serenity::all::{
     ChannelId, CreateEmbed, EditMember, EditMessage, GuildId, Mentionable, Timestamp, User, UserId,
 };
 use silverpelt::{
+    ar_event::AntiraidEventOperations,
     punishments::{PunishmentCreateOperations, PunishmentOperations},
     stings::{StingCreateOperations, StingOperations},
     Error,
@@ -256,26 +258,24 @@ async fn prune(
     let author_user_id = author.user.id;
     let target_user_id = user.as_ref().map(|u| u.id);
     let correlation_id = sqlx::types::uuid::Uuid::new_v4();
-    let results = silverpelt::ar_event::AntiraidEvent::ModerationStart(
-        silverpelt::ar_event::ModerationStartEventData {
-            correlation_id,
-            reason: Some(reason.clone()),
-            author: match author {
-                std::borrow::Cow::Borrowed(member) => member.clone(),
-                std::borrow::Cow::Owned(member) => member,
-            },
-            action: silverpelt::ar_event::ModerationAction::Prune {
-                user,
-                prune_opts: prune_opts.clone(),
-                channels: if let Some(ref channels) = prune_channels {
-                    parse_numeric_list::<ChannelId>(channels, &REPLACE_CHANNEL)?
-                } else {
-                    Vec::new()
-                },
-            },
-            num_stings: stings,
+    let results = AntiraidEvent::ModerationStart(ModerationStartEventData {
+        correlation_id,
+        reason: Some(reason.clone()),
+        author: match author {
+            std::borrow::Cow::Borrowed(member) => member.clone(),
+            std::borrow::Cow::Owned(member) => member,
         },
-    )
+        action: ModerationAction::Prune {
+            user,
+            prune_opts: prune_opts.clone(),
+            channels: if let Some(ref channels) = prune_channels {
+                parse_numeric_list::<ChannelId>(channels, &REPLACE_CHANNEL)?
+            } else {
+                Vec::new()
+            },
+        },
+        num_stings: stings,
+    })
     .dispatch_to_template_worker_and_wait(&data, guild_id, Duration::from_secs(1))
     .await?;
 
@@ -394,11 +394,9 @@ async fn prune(
         }
     }
 
-    silverpelt::ar_event::AntiraidEvent::ModerationEnd(
-        silverpelt::ar_event::ModerationEndEventData { correlation_id },
-    )
-    .dispatch_to_template_worker_and_nowait(&data, guild_id)
-    .await?;
+    AntiraidEvent::ModerationEnd(ModerationEndEventData { correlation_id })
+        .dispatch_to_template_worker_and_nowait(&data, guild_id)
+        .await?;
 
     Ok(())
 }
@@ -448,18 +446,16 @@ async fn kick(
     let target_user_id = member.user.id;
     let target_mention = member.mention();
 
-    let results = silverpelt::ar_event::AntiraidEvent::ModerationStart(
-        silverpelt::ar_event::ModerationStartEventData {
-            correlation_id,
-            reason: Some(reason.clone()),
-            action: silverpelt::ar_event::ModerationAction::Kick { member },
-            author: match author {
-                std::borrow::Cow::Borrowed(member) => member.clone(),
-                std::borrow::Cow::Owned(member) => member,
-            },
-            num_stings: stings,
+    let results = AntiraidEvent::ModerationStart(ModerationStartEventData {
+        correlation_id,
+        reason: Some(reason.clone()),
+        action: ModerationAction::Kick { member },
+        author: match author {
+            std::borrow::Cow::Borrowed(member) => member.clone(),
+            std::borrow::Cow::Owned(member) => member,
         },
-    )
+        num_stings: stings,
+    })
     .dispatch_to_template_worker_and_wait(&data, guild_id, Duration::from_secs(1))
     .await?;
 
@@ -535,11 +531,9 @@ async fn kick(
             .await?;
     };
 
-    silverpelt::ar_event::AntiraidEvent::ModerationEnd(
-        silverpelt::ar_event::ModerationEndEventData { correlation_id },
-    )
-    .dispatch_to_template_worker_and_nowait(&data, guild_id)
-    .await?;
+    AntiraidEvent::ModerationEnd(ModerationEndEventData { correlation_id })
+        .dispatch_to_template_worker_and_nowait(&data, guild_id)
+        .await?;
 
     embed = CreateEmbed::new()
         .title("Kicking Member...")
@@ -604,21 +598,19 @@ async fn ban(
     let target_user_id = user.id;
     let target_mention = user.mention();
 
-    let results = silverpelt::ar_event::AntiraidEvent::ModerationStart(
-        silverpelt::ar_event::ModerationStartEventData {
-            correlation_id,
-            reason: Some(reason.clone()),
-            action: silverpelt::ar_event::ModerationAction::Ban {
-                user,
-                prune_dmd: dmd,
-            },
-            author: match author {
-                std::borrow::Cow::Borrowed(member) => member.clone(),
-                std::borrow::Cow::Owned(member) => member,
-            },
-            num_stings: stings,
+    let results = AntiraidEvent::ModerationStart(ModerationStartEventData {
+        correlation_id,
+        reason: Some(reason.clone()),
+        action: ModerationAction::Ban {
+            user,
+            prune_dmd: dmd,
         },
-    )
+        author: match author {
+            std::borrow::Cow::Borrowed(member) => member.clone(),
+            std::borrow::Cow::Owned(member) => member,
+        },
+        num_stings: stings,
+    })
     .dispatch_to_template_worker_and_wait(&data, guild_id, Duration::from_secs(1))
     .await?;
 
@@ -693,11 +685,9 @@ async fn ban(
             .await?;
     };
 
-    silverpelt::ar_event::AntiraidEvent::ModerationEnd(
-        silverpelt::ar_event::ModerationEndEventData { correlation_id },
-    )
-    .dispatch_to_template_worker_and_nowait(&data, guild_id)
-    .await?;
+    AntiraidEvent::ModerationEnd(ModerationEndEventData { correlation_id })
+        .dispatch_to_template_worker_and_nowait(&data, guild_id)
+        .await?;
 
     embed = CreateEmbed::new()
         .title("Banning Member...")
@@ -765,22 +755,20 @@ async fn tempban(
     let target_user_id = user.id;
     let target_mention = user.mention();
 
-    let results = silverpelt::ar_event::AntiraidEvent::ModerationStart(
-        silverpelt::ar_event::ModerationStartEventData {
-            correlation_id,
-            reason: Some(reason.clone()),
-            action: silverpelt::ar_event::ModerationAction::TempBan {
-                user,
-                duration: (duration.0 * duration.1.to_seconds()),
-                prune_dmd: dmd,
-            },
-            author: match author {
-                std::borrow::Cow::Borrowed(member) => member.clone(),
-                std::borrow::Cow::Owned(member) => member,
-            },
-            num_stings: stings,
+    let results = AntiraidEvent::ModerationStart(ModerationStartEventData {
+        correlation_id,
+        reason: Some(reason.clone()),
+        action: ModerationAction::TempBan {
+            user,
+            duration: (duration.0 * duration.1.to_seconds()),
+            prune_dmd: dmd,
         },
-    )
+        author: match author {
+            std::borrow::Cow::Borrowed(member) => member.clone(),
+            std::borrow::Cow::Owned(member) => member,
+        },
+        num_stings: stings,
+    })
     .dispatch_to_template_worker_and_wait(&data, guild_id, Duration::from_secs(1))
     .await?;
 
@@ -859,11 +847,9 @@ async fn tempban(
             .await?;
     };
 
-    silverpelt::ar_event::AntiraidEvent::ModerationEnd(
-        silverpelt::ar_event::ModerationEndEventData { correlation_id },
-    )
-    .dispatch_to_template_worker_and_nowait(&data, guild_id)
-    .await?;
+    AntiraidEvent::ModerationEnd(ModerationEndEventData { correlation_id })
+        .dispatch_to_template_worker_and_nowait(&data, guild_id)
+        .await?;
 
     embed = CreateEmbed::new()
         .title("(Temporarily) Banned Member...")
@@ -923,18 +909,16 @@ async fn unban(
     let target_user_id = user.id;
     let target_mention = user.mention();
 
-    silverpelt::ar_event::AntiraidEvent::ModerationStart(
-        silverpelt::ar_event::ModerationStartEventData {
-            correlation_id,
-            reason: Some(reason.clone()),
-            action: silverpelt::ar_event::ModerationAction::Unban { user },
-            author: match author {
-                std::borrow::Cow::Borrowed(member) => member.clone(),
-                std::borrow::Cow::Owned(member) => member,
-            },
-            num_stings: stings,
+    AntiraidEvent::ModerationStart(ModerationStartEventData {
+        correlation_id,
+        reason: Some(reason.clone()),
+        action: ModerationAction::Unban { user },
+        author: match author {
+            std::borrow::Cow::Borrowed(member) => member.clone(),
+            std::borrow::Cow::Owned(member) => member,
         },
-    )
+        num_stings: stings,
+    })
     .dispatch_to_template_worker_and_wait(&data, guild_id, Duration::from_secs(1))
     .await?;
 
@@ -987,11 +971,9 @@ async fn unban(
             .await?;
     };
 
-    silverpelt::ar_event::AntiraidEvent::ModerationEnd(
-        silverpelt::ar_event::ModerationEndEventData { correlation_id },
-    )
-    .dispatch_to_template_worker_and_nowait(&data, guild_id)
-    .await?;
+    AntiraidEvent::ModerationEnd(ModerationEndEventData { correlation_id })
+        .dispatch_to_template_worker_and_nowait(&data, guild_id)
+        .await?;
 
     embed = CreateEmbed::new()
         .title("Unbanning Member...")
@@ -1072,21 +1054,19 @@ async fn timeout(
     let target_user_id = member.user.id;
     let target_mention = member.user.mention();
 
-    let results = silverpelt::ar_event::AntiraidEvent::ModerationStart(
-        silverpelt::ar_event::ModerationStartEventData {
-            correlation_id,
-            reason: Some(reason.clone()),
-            action: silverpelt::ar_event::ModerationAction::Timeout {
-                member,
-                duration: (duration.0 * duration.1.to_seconds()),
-            },
-            author: match author {
-                std::borrow::Cow::Borrowed(member) => member.clone(),
-                std::borrow::Cow::Owned(member) => member,
-            },
-            num_stings: stings,
+    let results = AntiraidEvent::ModerationStart(ModerationStartEventData {
+        correlation_id,
+        reason: Some(reason.clone()),
+        action: ModerationAction::Timeout {
+            member,
+            duration: (duration.0 * duration.1.to_seconds()),
         },
-    )
+        author: match author {
+            std::borrow::Cow::Borrowed(member) => member.clone(),
+            std::borrow::Cow::Owned(member) => member,
+        },
+        num_stings: stings,
+    })
     .dispatch_to_template_worker_and_wait(&data, guild_id, Duration::from_secs(1))
     .await?;
 
@@ -1173,11 +1153,9 @@ async fn timeout(
             .await?;
     };
 
-    silverpelt::ar_event::AntiraidEvent::ModerationEnd(
-        silverpelt::ar_event::ModerationEndEventData { correlation_id },
-    )
-    .dispatch_to_template_worker_and_nowait(&data, guild_id)
-    .await?;
+    AntiraidEvent::ModerationEnd(ModerationEndEventData { correlation_id })
+        .dispatch_to_template_worker_and_nowait(&data, guild_id)
+        .await?;
 
     embed = CreateEmbed::new()
         .title("Timed Out Member...")

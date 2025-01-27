@@ -1,6 +1,9 @@
-use antiraid_types::userinfo::UserInfo;
+use antiraid_types::{
+    ar_event::{AntiraidEvent, BuiltinCommandExecuteData, PermissionCheckData},
+    userinfo::UserInfo,
+};
 use serenity::all::{GuildId, UserId};
-use silverpelt::userinfo::UserInfoOperations;
+use silverpelt::{ar_event::AntiraidEventOperations, userinfo::UserInfoOperations};
 use sqlx::PgPool;
 use std::time::Duration;
 
@@ -41,13 +44,11 @@ pub async fn check_command(
     )
     .await?;
 
-    let builtin_command_exec = silverpelt::ar_event::AntiraidEvent::BuiltinCommandExecute(
-        silverpelt::ar_event::BuiltinCommandExecuteData {
-            command: command.to_string(),
-            user_id,
-            user_info,
-        },
-    );
+    let builtin_command_exec = AntiraidEvent::BuiltinCommandExecute(BuiltinCommandExecuteData {
+        command: command.to_string(),
+        user_id,
+        user_info,
+    });
 
     let results = builtin_command_exec
         .dispatch_to_template_worker_and_wait(
@@ -62,9 +63,7 @@ pub async fn check_command(
     }
 
     // Take back the command data from the event
-    let silverpelt::ar_event::AntiraidEvent::BuiltinCommandExecute(command_data) =
-        builtin_command_exec
-    else {
+    let AntiraidEvent::BuiltinCommandExecute(command_data) = builtin_command_exec else {
         unreachable!();
     };
 
@@ -103,13 +102,11 @@ pub async fn member_has_kittycat_perm(
     )
     .await?;
 
-    let perm_check_data = silverpelt::ar_event::AntiraidEvent::PermissionCheckExecute(
-        silverpelt::ar_event::PermissionCheckData {
-            user_id,
-            user_info,
-            perm,
-        },
-    );
+    let perm_check_data = AntiraidEvent::PermissionCheckExecute(PermissionCheckData {
+        user_id,
+        user_info,
+        perm,
+    });
 
     let results = perm_check_data
         .dispatch_to_template_worker_and_wait(
@@ -124,9 +121,7 @@ pub async fn member_has_kittycat_perm(
     }
 
     // Take back the permission data from the event
-    let silverpelt::ar_event::AntiraidEvent::PermissionCheckExecute(perm_check_data) =
-        perm_check_data
-    else {
+    let AntiraidEvent::PermissionCheckExecute(perm_check_data) = perm_check_data else {
         unreachable!();
     };
 

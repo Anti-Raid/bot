@@ -1,4 +1,6 @@
+use antiraid_types::ar_event::AntiraidEvent;
 use serenity::all::{CreateActionRow, CreateButton, CreateEmbed};
+use silverpelt::ar_event::AntiraidEventOperations;
 
 pub async fn load_autocomplete<'a>(
     ctx: crate::Context<'_>,
@@ -205,7 +207,7 @@ pub async fn load(
     .map_err(|e| format!("Failed to add template to guild: {:?}", e))?;
 
     // Dispatch a OnStartup event for the template
-    silverpelt::ar_event::AntiraidEvent::OnStartup(vec![name])
+    AntiraidEvent::OnStartup(vec![name])
         .dispatch_to_template_worker_and_nowait(&ctx.data(), guild_id)
         .await
         .map_err(|e| format!("Failed to dispatch OnStartup event: {:?}", e))?;
