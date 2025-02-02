@@ -1455,10 +1455,14 @@ impl SettingDeleter<SettingsData> for GuildTemplateExecutor {
     ) -> Result<(), Error> {
         check_perms(ctx, "guild_templates.delete".into()).await?;
 
+        let Value::String(primary_key) = primary_key else {
+            return Err("Invalid primary key".into());
+        };
+
         let Some(row) = sqlx::query!(
             "SELECT name FROM guild_templates WHERE guild_id = $1 AND name = $2",
             ctx.guild_id.to_string(),
-            primary_key.to_string()
+            primary_key
         )
         .fetch_optional(&ctx.data.pool)
         .await
