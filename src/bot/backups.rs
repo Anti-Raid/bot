@@ -163,6 +163,8 @@ pub async fn backups_create(
             id: None,
             user_id: ctx.author().id.to_string(),
         },
+        &config::CONFIG.base_ports.jobserver_base_addr,
+        config::CONFIG.base_ports.jobserver,
     )
     .await?
     .id;
@@ -580,6 +582,8 @@ pub async fn backups_list(ctx: Context<'_>) -> Result<(), Error> {
                         id: None,
                         user_id: ctx.author().id.to_string(),
                     },
+                    &config::CONFIG.base_ports.jobserver_base_addr,
+                    config::CONFIG.base_ports.jobserver,
                 )
                 .await?
                 .id;
@@ -1147,6 +1151,8 @@ pub async fn backups_restore(
             id: None,
             user_id: ctx.author().id.to_string(),
         },
+        &config::CONFIG.base_ports.jobserver_base_addr,
+        config::CONFIG.base_ports.jobserver,
     )
     .await?
     .id;

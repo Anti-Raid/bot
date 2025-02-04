@@ -14,6 +14,8 @@ use async_trait::async_trait;
 use crate::botlib::settings::SettingsData;
 use crate::Error;
 
+use super::{kittycat_permission_config_data, sandwich_config, template_dispatch_data};
+
 async fn check_perms(
     ctx: &SettingsData,
     perm: kittycat::perms::Permission,
@@ -374,6 +376,7 @@ impl GuildRolesExecutor {
             &ctx.serenity_context.http,
             &ctx.data.reqwest,
             ctx.guild_id,
+            &sandwich_config(),
         )
         .await
         .map_err(|e| format!("Failed to get guild: {:?}", e))?;
@@ -394,6 +397,7 @@ impl GuildRolesExecutor {
             &ctx.data.reqwest,
             ctx.guild_id,
             ctx.author,
+            &sandwich_config(),
         )
         .await
         .map_err(|e| format!("Failed to get member: {:?}", e))?
@@ -469,6 +473,7 @@ impl GuildRolesExecutor {
             guild.owner_id,
             ctx.author,
             &member.roles,
+            kittycat_permission_config_data()
         )
         .await
         .map_err(|e| format!("Failed to get author permissions: {:?}", e))?
@@ -626,6 +631,7 @@ impl GuildMembersExecutor {
             &data.data.reqwest,
             guild_id,
             user_id,
+            &sandwich_config(),
         )
         .await
         .map_err(|e| format!("Failed to get user {}: {:?}", user_id, e))?
@@ -639,6 +645,7 @@ impl GuildMembersExecutor {
             guild_owner_id,
             user_id,
             &member.roles,
+            kittycat_permission_config_data()
         )
         .await
         .map_err(|e| format!("Failed to get user permissions: {:?} ({})", e, user_id))?
@@ -712,6 +719,7 @@ impl GuildMembersExecutor {
             &ctx.serenity_context.http,
             &ctx.data.reqwest,
             ctx.guild_id,
+            &sandwich_config(),
         )
         .await
         .map_err(|e| format!("Failed to get guild: {:?}", e))?;
@@ -1097,6 +1105,7 @@ impl GuildTemplateExecutor {
             &ctx.data.reqwest,
             Some(ctx.guild_id),
             channel_id,
+            &sandwich_config(),
         )
         .await
         .map_err(|e| format!("Failed to fetch channel id: {} with field: {}", e, channel_field))?;
@@ -1122,6 +1131,7 @@ impl GuildTemplateExecutor {
             &ctx.data.reqwest,
             ctx.guild_id,
             bot_user_id,
+            &sandwich_config(),
         )
         .await
         .map_err(|e| {
@@ -1146,6 +1156,7 @@ impl GuildTemplateExecutor {
             &ctx.serenity_context.http,
             &ctx.data.reqwest,
             ctx.guild_id,
+            &sandwich_config(),
         )
         .await
         .map_err(|e| 
@@ -1192,7 +1203,7 @@ impl GuildTemplateExecutor {
     async fn post_action(&self, ctx: &SettingsData, name: &str) -> Result<(), Error> {
         // Dispatch a OnStartup event for the template
         AntiraidEvent::OnStartup(vec![name.to_string()])
-            .dispatch_to_template_worker_and_nowait(&ctx.data, ctx.guild_id)
+            .dispatch_to_template_worker_and_nowait(&ctx.data, ctx.guild_id, &template_dispatch_data())
             .await
             .map_err(|e| format!("Failed to dispatch OnStartup event: {:?}", e))?;
 
@@ -1631,7 +1642,7 @@ impl SettingCreator<SettingsData> for GuildTemplatesKVExecutor {
             author: ctx.author,
             action: ExternalKeyUpdateEventDataAction::Create
         })
-        .dispatch_to_template_worker_and_nowait(&ctx.data, ctx.guild_id)
+        .dispatch_to_template_worker_and_nowait(&ctx.data, ctx.guild_id, &template_dispatch_data())
         .await
         .map_err(|e| format!("Failed to dispatch ExternalKeyUpdate event: {:?}", e))?;
 
@@ -1672,7 +1683,7 @@ impl SettingUpdater<SettingsData> for GuildTemplatesKVExecutor {
         author: ctx.author,
         action: ExternalKeyUpdateEventDataAction::Update
     })
-        .dispatch_to_template_worker_and_nowait(&ctx.data, ctx.guild_id)
+        .dispatch_to_template_worker_and_nowait(&ctx.data, ctx.guild_id, &template_dispatch_data())
         .await
         .map_err(|e| format!("Failed to dispatch ExternalKeyUpdate event: {:?}", e))?;
 
@@ -1719,7 +1730,7 @@ impl SettingDeleter<SettingsData> for GuildTemplatesKVExecutor {
             author: ctx.author,
             action: ExternalKeyUpdateEventDataAction::Delete
         })
-        .dispatch_to_template_worker_and_nowait(&ctx.data, ctx.guild_id)
+        .dispatch_to_template_worker_and_nowait(&ctx.data, ctx.guild_id, &template_dispatch_data())
         .await
         .map_err(|e| format!("Failed to dispatch ExternalKeyUpdate event: {:?}", e))?;
 
@@ -2695,7 +2706,7 @@ impl SettingCreator<SettingsData> for LockdownExecutor {
         };
 
         lockdowns
-            .easy_apply(lockdown_type, &lockdown_data, reason)
+            .easy_apply(lockdown_type, &lockdown_data, reason, &sandwich_config())
             .await
             .map_err(|e| format!("Error while applying lockdown: {}", e))?;
 
@@ -2744,7 +2755,7 @@ impl SettingDeleter<SettingsData> for LockdownExecutor {
 
         // Remove the lockdown
         lockdowns
-            .easy_remove(primary_key, &lockdown_data)
+            .easy_remove(primary_key, &lockdown_data, &sandwich_config(),)
             .await
             .map_err(|e| format!("Error while removing lockdown: {}", e))?;
 

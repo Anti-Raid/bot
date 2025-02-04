@@ -11,6 +11,8 @@ use std::sync::Arc;
 use ar_settings::{self, types::OperationType};
 use types::{CanonicalSettingsResult, SettingsOperationRequest};
 
+use crate::bot::sandwich_config;
+
 type Response<T> = Result<Json<T>, (StatusCode, String)>;
 
 #[derive(Clone)]
@@ -104,6 +106,7 @@ async fn guilds_exist(
             &serenity_context.http,
             &data.reqwest,
             guild,
+            &sandwich_config(),
         )
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
@@ -135,6 +138,7 @@ async fn base_guild_user_info(
         &serenity_context.http,
         &data.reqwest,
         guild_id,
+        &sandwich_config(),
     )
     .await
     .map_err(|e| {
@@ -151,6 +155,7 @@ async fn base_guild_user_info(
         &data.reqwest,
         guild_id,
         user_id,
+        &sandwich_config(),
     )
     .await
     {
@@ -172,6 +177,7 @@ async fn base_guild_user_info(
         &data.reqwest,
         guild_id,
         bot_user_id,
+        &sandwich_config(),
     )
     .await
     {
@@ -193,6 +199,7 @@ async fn base_guild_user_info(
         &serenity_context.http,
         &data.reqwest,
         guild_id,
+        &sandwich_config(),
     )
     .await
     .map_err(|e| {

@@ -1,6 +1,6 @@
 use std::num::NonZeroU16;
 
-use crate::{Context, Error};
+use crate::{bot::sandwich_config, Context, Error};
 use poise::{serenity_prelude::CreateEmbed, CreateReply};
 use serenity::builder::EditMessage;
 
@@ -25,7 +25,8 @@ pub async fn ping(ctx: Context<'_>) -> Result<(), Error> {
     let new_st = std::time::Instant::now();
 
     let real_ws_latency = {
-        let sandwich_resp = sandwich_driver::get_status(&ctx.data().reqwest).await?;
+        let sandwich_resp =
+            sandwich_driver::get_status(&ctx.data().reqwest, &sandwich_config()).await?;
         // Due to Sandwich Virtual Sharding etc, we need to reshard the guild id
         let sid = {
             if let Some(guild_id) = ctx.guild_id() {

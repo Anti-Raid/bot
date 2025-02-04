@@ -1,4 +1,4 @@
-use crate::{Context, Error};
+use crate::{bot::sandwich_config, Context, Error};
 use poise::{serenity_prelude::CreateEmbed, CreateReply};
 use rust_buildstats::{
     BUILD_CPU, CARGO_PROFILE, GIT_COMMIT_MSG, GIT_REPO, GIT_SHA, RUSTC_VERSION, VERSION,
@@ -10,7 +10,8 @@ pub async fn stats(ctx: Context<'_>) -> Result<(), Error> {
     let total_cached_guilds = ctx.cache().guild_count();
 
     let total_guilds = {
-        let sandwich_resp = sandwich_driver::get_status(&ctx.data().reqwest).await?;
+        let sandwich_resp =
+            sandwich_driver::get_status(&ctx.data().reqwest, &sandwich_config()).await?;
 
         let mut guild_count = 0;
         sandwich_resp.shard_conns.iter().for_each(|(_, sc)| {

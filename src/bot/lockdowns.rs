@@ -1,4 +1,4 @@
-use crate::{Context, Error};
+use crate::{bot::sandwich_config, Context, Error};
 
 pub async fn lockdown_autocomplete<'a>(
     ctx: crate::Context<'_>,
@@ -120,7 +120,12 @@ pub async fn lockdowns_tsl(ctx: Context<'_>, reason: String) -> Result<(), Error
     ctx.defer().await?;
 
     lockdowns
-        .easy_apply(Box::new(lockdown_type), &lockdown_data, &reason)
+        .easy_apply(
+            Box::new(lockdown_type),
+            &lockdown_data,
+            &reason,
+            &sandwich_config(),
+        )
         .await
         .map_err(|e| format!("Error while applying lockdown: {}", e))?;
 
@@ -156,7 +161,12 @@ pub async fn lockdowns_qsl(ctx: Context<'_>, reason: String) -> Result<(), Error
     ctx.defer().await?;
 
     lockdowns
-        .easy_apply(Box::new(lockdown_type), &lockdown_data, &reason)
+        .easy_apply(
+            Box::new(lockdown_type),
+            &lockdown_data,
+            &reason,
+            &sandwich_config(),
+        )
         .await
         .map_err(|e| format!("Error while applying lockdown: {}", e))?;
 
@@ -197,7 +207,12 @@ pub async fn lockdowns_scl(
     ctx.defer().await?;
 
     lockdowns
-        .easy_apply(Box::new(lockdown_type), &lockdown_data, &reason)
+        .easy_apply(
+            Box::new(lockdown_type),
+            &lockdown_data,
+            &reason,
+            &sandwich_config(),
+        )
         .await
         .map_err(|e| format!("Error while applying lockdown: {}", e))?;
 
@@ -237,7 +252,12 @@ pub async fn lockdowns_role(
     ctx.defer().await?;
 
     lockdowns
-        .easy_apply(Box::new(lockdown_type), &lockdown_data, &reason)
+        .easy_apply(
+            Box::new(lockdown_type),
+            &lockdown_data,
+            &reason,
+            &sandwich_config(),
+        )
         .await
         .map_err(|e| format!("Error while applying lockdown: {}", e))?;
 
@@ -273,7 +293,7 @@ pub async fn lockdowns_remove(
     ctx.defer().await?;
 
     lockdowns
-        .easy_remove(id.parse()?, &lockdown_data)
+        .easy_remove(id.parse()?, &lockdown_data, &sandwich_config())
         .await
         .map_err(|e| format!("Error while applying lockdown: {}", e))?;
 

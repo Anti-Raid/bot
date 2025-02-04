@@ -7,6 +7,8 @@ use silverpelt::{ar_event::AntiraidEventOperations, userinfo::UserInfoOperations
 use sqlx::PgPool;
 use std::time::Duration;
 
+use crate::bot::{kittycat_permission_config_data, sandwich_config, template_dispatch_data};
+
 pub type PermissionCheck = fn(&str, serenity::all::UserId, &UserInfo) -> Result<(), crate::Error>;
 
 pub fn permission_check_none(
@@ -37,6 +39,8 @@ pub async fn check_command(
         pool,
         serenity_context,
         reqwest,
+        kittycat_permission_config_data(),
+        &sandwich_config(),
         match poise_ctx {
             Some(crate::Context::Application(a)) => a.interaction.member.as_ref(),
             _ => None,
@@ -54,6 +58,7 @@ pub async fn check_command(
         .dispatch_to_template_worker_and_wait(
             &serenity_context.data::<silverpelt::data::Data>(),
             guild_id,
+            &template_dispatch_data(),
             Duration::from_secs(1),
         )
         .await?;
@@ -95,6 +100,8 @@ pub async fn member_has_kittycat_perm(
         pool,
         serenity_context,
         reqwest,
+        kittycat_permission_config_data(),
+        &sandwich_config(),
         match poise_ctx {
             Some(crate::Context::Application(a)) => a.interaction.member.as_ref(),
             _ => None,
@@ -112,6 +119,7 @@ pub async fn member_has_kittycat_perm(
         .dispatch_to_template_worker_and_wait(
             &serenity_context.data::<silverpelt::data::Data>(),
             guild_id,
+            &template_dispatch_data(),
             Duration::from_secs(1),
         )
         .await?;

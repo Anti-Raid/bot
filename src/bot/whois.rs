@@ -1,4 +1,4 @@
-use crate::Context;
+use crate::{bot::sandwich_config, Context};
 use silverpelt::Error;
 
 use serenity::all::{CreateEmbed, Member, Mentionable, User};
@@ -76,6 +76,7 @@ pub async fn whois(ctx: Context<'_>, user: Option<User>) -> Result<(), Error> {
                 &data.reqwest,
                 guild_id,
                 user.id,
+                &sandwich_config(),
             )
             .await?;
 

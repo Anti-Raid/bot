@@ -1,4 +1,4 @@
-use crate::Context;
+use crate::{bot::template_dispatch_data, Context};
 use antiraid_types::{
     ar_event::{AntiraidEvent, ModerationAction, ModerationEndEventData, ModerationStartEventData},
     punishments::{PunishmentCreate, PunishmentState, PunishmentTarget},
@@ -22,6 +22,8 @@ use splashcore_rs::utils::{
     parse_numeric_list_to_str, Unit, REPLACE_CHANNEL,
 };
 use std::{collections::HashMap, time::Duration};
+
+use super::sandwich_config;
 
 /// Helper method to get the username of a user
 fn username(m: &User) -> String {
@@ -116,25 +118,53 @@ async fn check_hierarchy(ctx: &Context<'_>, user_id: UserId) -> Result<(), Error
         return Err("This command can only be used in a guild".into());
     };
 
-    let guild = guild(&sctx.cache, &sctx.http, &data.reqwest, guild_id).await?;
+    let guild = guild(
+        &sctx.cache,
+        &sctx.http,
+        &data.reqwest,
+        guild_id,
+        &sandwich_config(),
+    )
+    .await?;
 
     let author_id = ctx.author().id;
 
     let bot_userid = sctx.cache.current_user().id;
-    let Some(bot) =
-        member_in_guild(&sctx.cache, &sctx.http, &data.reqwest, guild_id, bot_userid).await?
+    let Some(bot) = member_in_guild(
+        &sctx.cache,
+        &sctx.http,
+        &data.reqwest,
+        guild_id,
+        bot_userid,
+        &sandwich_config(),
+    )
+    .await?
     else {
         return Err("Bot member not found".into());
     };
 
-    let Some(author) =
-        member_in_guild(&sctx.cache, &sctx.http, &data.reqwest, guild_id, author_id).await?
+    let Some(author) = member_in_guild(
+        &sctx.cache,
+        &sctx.http,
+        &data.reqwest,
+        guild_id,
+        author_id,
+        &sandwich_config(),
+    )
+    .await?
     else {
         return Err("Message author not found".into());
     };
 
-    let Some(user) =
-        member_in_guild(&sctx.cache, &sctx.http, &data.reqwest, guild_id, user_id).await?
+    let Some(user) = member_in_guild(
+        &sctx.cache,
+        &sctx.http,
+        &data.reqwest,
+        guild_id,
+        user_id,
+        &sandwich_config(),
+    )
+    .await?
     else {
         // User is not in the server, so yes, they're below us
         return Ok(());
@@ -276,7 +306,12 @@ async fn prune(
         },
         num_stings: stings,
     })
-    .dispatch_to_template_worker_and_wait(&data, guild_id, Duration::from_secs(1))
+    .dispatch_to_template_worker_and_wait(
+        &data,
+        guild_id,
+        &template_dispatch_data(),
+        Duration::from_secs(1),
+    )
     .await?;
 
     if !results.can_execute() {
@@ -323,6 +358,8 @@ async fn prune(
             id: None,
             user_id: author_user_id.to_string(),
         },
+        &config::CONFIG.base_ports.jobserver_base_addr,
+        config::CONFIG.base_ports.jobserver,
     )
     .await?
     .id;
@@ -332,7 +369,7 @@ async fn prune(
     // Lastly, fire sting create event
     if let Some(sting_dispatch) = sting_dispatch {
         sting_dispatch
-            .dispatch_create_event(ctx.serenity_context().clone())
+            .dispatch_create_event(ctx.serenity_context().clone(), &template_dispatch_data())
             .await?;
     };
 
@@ -395,7 +432,7 @@ async fn prune(
     }
 
     AntiraidEvent::ModerationEnd(ModerationEndEventData { correlation_id })
-        .dispatch_to_template_worker_and_nowait(&data, guild_id)
+        .dispatch_to_template_worker_and_nowait(&data, guild_id, &template_dispatch_data())
         .await?;
 
     Ok(())
@@ -456,7 +493,12 @@ async fn kick(
         },
         num_stings: stings,
     })
-    .dispatch_to_template_worker_and_wait(&data, guild_id, Duration::from_secs(1))
+    .dispatch_to_template_worker_and_wait(
+        &data,
+        guild_id,
+        &template_dispatch_data(),
+        Duration::from_secs(1),
+    )
     .await?;
 
     if !results.can_execute() {
@@ -524,15 +566,16 @@ async fn kick(
 
     tx.commit().await?;
 
-    p.dispatch_event(ctx.serenity_context().clone()).await?;
+    p.dispatch_event(ctx.serenity_context().clone(), &template_dispatch_data())
+        .await?;
     if let Some(sting_dispatch) = sting_dispatch {
         sting_dispatch
-            .dispatch_create_event(ctx.serenity_context().clone())
+            .dispatch_create_event(ctx.serenity_context().clone(), &template_dispatch_data())
             .await?;
     };
 
     AntiraidEvent::ModerationEnd(ModerationEndEventData { correlation_id })
-        .dispatch_to_template_worker_and_nowait(&data, guild_id)
+        .dispatch_to_template_worker_and_nowait(&data, guild_id, &template_dispatch_data())
         .await?;
 
     embed = CreateEmbed::new()
@@ -611,7 +654,12 @@ async fn ban(
         },
         num_stings: stings,
     })
-    .dispatch_to_template_worker_and_wait(&data, guild_id, Duration::from_secs(1))
+    .dispatch_to_template_worker_and_wait(
+        &data,
+        guild_id,
+        &template_dispatch_data(),
+        Duration::from_secs(1),
+    )
     .await?;
 
     if !results.can_execute() {
@@ -678,15 +726,16 @@ async fn ban(
 
     tx.commit().await?;
 
-    p.dispatch_event(ctx.serenity_context().clone()).await?;
+    p.dispatch_event(ctx.serenity_context().clone(), &template_dispatch_data())
+        .await?;
     if let Some(sting_dispatch) = sting_dispatch {
         sting_dispatch
-            .dispatch_create_event(ctx.serenity_context().clone())
+            .dispatch_create_event(ctx.serenity_context().clone(), &template_dispatch_data())
             .await?;
     };
 
     AntiraidEvent::ModerationEnd(ModerationEndEventData { correlation_id })
-        .dispatch_to_template_worker_and_nowait(&data, guild_id)
+        .dispatch_to_template_worker_and_nowait(&data, guild_id, &template_dispatch_data())
         .await?;
 
     embed = CreateEmbed::new()
@@ -769,7 +818,12 @@ async fn tempban(
         },
         num_stings: stings,
     })
-    .dispatch_to_template_worker_and_wait(&data, guild_id, Duration::from_secs(1))
+    .dispatch_to_template_worker_and_wait(
+        &data,
+        guild_id,
+        &template_dispatch_data(),
+        Duration::from_secs(1),
+    )
     .await?;
 
     if !results.can_execute() {
@@ -840,15 +894,16 @@ async fn tempban(
 
     tx.commit().await?;
 
-    p.dispatch_event(ctx.serenity_context().clone()).await?;
+    p.dispatch_event(ctx.serenity_context().clone(), &template_dispatch_data())
+        .await?;
     if let Some(sting_dispatch) = sting_dispatch {
         sting_dispatch
-            .dispatch_create_event(ctx.serenity_context().clone())
+            .dispatch_create_event(ctx.serenity_context().clone(), &template_dispatch_data())
             .await?;
     };
 
     AntiraidEvent::ModerationEnd(ModerationEndEventData { correlation_id })
-        .dispatch_to_template_worker_and_nowait(&data, guild_id)
+        .dispatch_to_template_worker_and_nowait(&data, guild_id, &template_dispatch_data())
         .await?;
 
     embed = CreateEmbed::new()
@@ -919,7 +974,12 @@ async fn unban(
         },
         num_stings: stings,
     })
-    .dispatch_to_template_worker_and_wait(&data, guild_id, Duration::from_secs(1))
+    .dispatch_to_template_worker_and_wait(
+        &data,
+        guild_id,
+        &template_dispatch_data(),
+        Duration::from_secs(1),
+    )
     .await?;
 
     let mut embed = CreateEmbed::new()
@@ -967,12 +1027,12 @@ async fn unban(
 
     if let Some(sting_dispatch) = sting_dispatch {
         sting_dispatch
-            .dispatch_create_event(ctx.serenity_context().clone())
+            .dispatch_create_event(ctx.serenity_context().clone(), &template_dispatch_data())
             .await?;
     };
 
     AntiraidEvent::ModerationEnd(ModerationEndEventData { correlation_id })
-        .dispatch_to_template_worker_and_nowait(&data, guild_id)
+        .dispatch_to_template_worker_and_nowait(&data, guild_id, &template_dispatch_data())
         .await?;
 
     embed = CreateEmbed::new()
@@ -1067,7 +1127,12 @@ async fn timeout(
         },
         num_stings: stings,
     })
-    .dispatch_to_template_worker_and_wait(&data, guild_id, Duration::from_secs(1))
+    .dispatch_to_template_worker_and_wait(
+        &data,
+        guild_id,
+        &template_dispatch_data(),
+        Duration::from_secs(1),
+    )
     .await?;
 
     if !results.can_execute() {
@@ -1146,15 +1211,16 @@ async fn timeout(
 
     tx.commit().await?;
 
-    p.dispatch_event(ctx.serenity_context().clone()).await?;
+    p.dispatch_event(ctx.serenity_context().clone(), &template_dispatch_data())
+        .await?;
     if let Some(sting_dispatch) = sting_dispatch {
         sting_dispatch
-            .dispatch_create_event(ctx.serenity_context().clone())
+            .dispatch_create_event(ctx.serenity_context().clone(), &template_dispatch_data())
             .await?;
     };
 
     AntiraidEvent::ModerationEnd(ModerationEndEventData { correlation_id })
-        .dispatch_to_template_worker_and_nowait(&data, guild_id)
+        .dispatch_to_template_worker_and_nowait(&data, guild_id, &template_dispatch_data())
         .await?;
 
     embed = CreateEmbed::new()

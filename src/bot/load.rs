@@ -2,6 +2,8 @@ use antiraid_types::ar_event::AntiraidEvent;
 use serenity::all::{CreateActionRow, CreateButton, CreateEmbed};
 use silverpelt::ar_event::AntiraidEventOperations;
 
+use crate::bot::template_dispatch_data;
+
 pub async fn load_autocomplete<'a>(
     ctx: crate::Context<'_>,
     partial: &str,
@@ -208,7 +210,7 @@ pub async fn load(
 
     // Dispatch a OnStartup event for the template
     AntiraidEvent::OnStartup(vec![name])
-        .dispatch_to_template_worker_and_nowait(&ctx.data(), guild_id)
+        .dispatch_to_template_worker_and_nowait(&ctx.data(), guild_id, &template_dispatch_data())
         .await
         .map_err(|e| format!("Failed to dispatch OnStartup event: {:?}", e))?;
 
