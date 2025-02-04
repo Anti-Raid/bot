@@ -1,3 +1,5 @@
+use silverpelt::lockdowns::LockdownData;
+
 use crate::{bot::sandwich_config, Context, Error};
 
 pub async fn lockdown_autocomplete<'a>(
@@ -62,9 +64,18 @@ pub async fn lockdowns_list(ctx: Context<'_>) -> Result<(), Error> {
 
     let data = ctx.data();
 
-    let lockdowns = lockdowns::LockdownSet::guild(guild_id, &data.pool)
-        .await
-        .map_err(|e| format!("Error while fetching lockdown set: {}", e))?;
+    let lockdowns = lockdowns::LockdownSet::guild(
+        guild_id,
+        LockdownData::new(
+            ctx.cache(),
+            ctx.http(),
+            data.pool.clone(),
+            data.reqwest.clone(),
+            sandwich_config(),
+        ),
+    )
+    .await
+    .map_err(|e| format!("Error while fetching lockdown set: {}", e))?;
 
     if lockdowns.lockdowns.is_empty() {
         return Err("No active lockdowns".into());
@@ -103,29 +114,26 @@ pub async fn lockdowns_tsl(ctx: Context<'_>, reason: String) -> Result<(), Error
     let data = ctx.data();
 
     // Get the current lockdown set
-    let mut lockdowns = lockdowns::LockdownSet::guild(guild_id, &data.pool)
-        .await
-        .map_err(|e| format!("Error while fetching lockdown set: {}", e))?;
+    let mut lockdowns = lockdowns::LockdownSet::guild(
+        guild_id,
+        LockdownData::new(
+            ctx.cache(),
+            ctx.http(),
+            data.pool.clone(),
+            data.reqwest.clone(),
+            sandwich_config(),
+        ),
+    )
+    .await
+    .map_err(|e| format!("Error while fetching lockdown set: {}", e))?;
 
     // Create the lockdown
     let lockdown_type = lockdowns::tsl::TraditionalServerLockdown {};
 
-    let lockdown_data = lockdowns::LockdownData {
-        cache: ctx.cache(),
-        http: ctx.http(),
-        pool: data.pool.clone(),
-        reqwest: data.reqwest.clone(),
-    };
-
     ctx.defer().await?;
 
     lockdowns
-        .easy_apply(
-            Box::new(lockdown_type),
-            &lockdown_data,
-            &reason,
-            &sandwich_config(),
-        )
+        .easy_apply(Box::new(lockdown_type), &reason)
         .await
         .map_err(|e| format!("Error while applying lockdown: {}", e))?;
 
@@ -144,29 +152,26 @@ pub async fn lockdowns_qsl(ctx: Context<'_>, reason: String) -> Result<(), Error
     let data = ctx.data();
 
     // Get the current lockdown set
-    let mut lockdowns = lockdowns::LockdownSet::guild(guild_id, &data.pool)
-        .await
-        .map_err(|e| format!("Error while fetching lockdown set: {}", e))?;
+    let mut lockdowns = lockdowns::LockdownSet::guild(
+        guild_id,
+        LockdownData::new(
+            ctx.cache(),
+            ctx.http(),
+            data.pool.clone(),
+            data.reqwest.clone(),
+            sandwich_config(),
+        ),
+    )
+    .await
+    .map_err(|e| format!("Error while fetching lockdown set: {}", e))?;
 
     // Create the lockdown
     let lockdown_type = lockdowns::qsl::QuickServerLockdown {};
 
-    let lockdown_data = lockdowns::LockdownData {
-        cache: ctx.cache(),
-        http: ctx.http(),
-        pool: data.pool.clone(),
-        reqwest: data.reqwest.clone(),
-    };
-
     ctx.defer().await?;
 
     lockdowns
-        .easy_apply(
-            Box::new(lockdown_type),
-            &lockdown_data,
-            &reason,
-            &sandwich_config(),
-        )
+        .easy_apply(Box::new(lockdown_type), &reason)
         .await
         .map_err(|e| format!("Error while applying lockdown: {}", e))?;
 
@@ -190,29 +195,26 @@ pub async fn lockdowns_scl(
     let channel = channel.unwrap_or(ctx.channel_id());
 
     // Get the current lockdown set
-    let mut lockdowns = lockdowns::LockdownSet::guild(guild_id, &data.pool)
-        .await
-        .map_err(|e| format!("Error while fetching lockdown set: {}", e))?;
+    let mut lockdowns = lockdowns::LockdownSet::guild(
+        guild_id,
+        LockdownData::new(
+            ctx.cache(),
+            ctx.http(),
+            data.pool.clone(),
+            data.reqwest.clone(),
+            sandwich_config(),
+        ),
+    )
+    .await
+    .map_err(|e| format!("Error while fetching lockdown set: {}", e))?;
 
     // Create the lockdown
     let lockdown_type = lockdowns::scl::SingleChannelLockdown(channel);
 
-    let lockdown_data = lockdowns::LockdownData {
-        cache: ctx.cache(),
-        http: ctx.http(),
-        pool: data.pool.clone(),
-        reqwest: data.reqwest.clone(),
-    };
-
     ctx.defer().await?;
 
     lockdowns
-        .easy_apply(
-            Box::new(lockdown_type),
-            &lockdown_data,
-            &reason,
-            &sandwich_config(),
-        )
+        .easy_apply(Box::new(lockdown_type), &reason)
         .await
         .map_err(|e| format!("Error while applying lockdown: {}", e))?;
 
@@ -235,29 +237,26 @@ pub async fn lockdowns_role(
     let data = ctx.data();
 
     // Get the current lockdown set
-    let mut lockdowns = lockdowns::LockdownSet::guild(guild_id, &data.pool)
-        .await
-        .map_err(|e| format!("Error while fetching lockdown set: {}", e))?;
+    let mut lockdowns = lockdowns::LockdownSet::guild(
+        guild_id,
+        LockdownData::new(
+            ctx.cache(),
+            ctx.http(),
+            data.pool.clone(),
+            data.reqwest.clone(),
+            sandwich_config(),
+        ),
+    )
+    .await
+    .map_err(|e| format!("Error while fetching lockdown set: {}", e))?;
 
     // Create the lockdown
     let lockdown_type = lockdowns::role::RoleLockdown(role);
 
-    let lockdown_data = lockdowns::LockdownData {
-        cache: ctx.cache(),
-        http: ctx.http(),
-        pool: data.pool.clone(),
-        reqwest: data.reqwest.clone(),
-    };
-
     ctx.defer().await?;
 
     lockdowns
-        .easy_apply(
-            Box::new(lockdown_type),
-            &lockdown_data,
-            &reason,
-            &sandwich_config(),
-        )
+        .easy_apply(Box::new(lockdown_type), &reason)
         .await
         .map_err(|e| format!("Error while applying lockdown: {}", e))?;
 
@@ -279,21 +278,23 @@ pub async fn lockdowns_remove(
     let data = ctx.data();
 
     // Get the current lockdown set
-    let mut lockdowns = lockdowns::LockdownSet::guild(guild_id, &data.pool)
-        .await
-        .map_err(|e| format!("Error while fetching lockdown set: {}", e))?;
-
-    let lockdown_data = lockdowns::LockdownData {
-        cache: ctx.cache(),
-        http: ctx.http(),
-        pool: data.pool.clone(),
-        reqwest: data.reqwest.clone(),
-    };
+    let mut lockdowns = lockdowns::LockdownSet::guild(
+        guild_id,
+        LockdownData::new(
+            ctx.cache(),
+            ctx.http(),
+            data.pool.clone(),
+            data.reqwest.clone(),
+            sandwich_config(),
+        ),
+    )
+    .await
+    .map_err(|e| format!("Error while fetching lockdown set: {}", e))?;
 
     ctx.defer().await?;
 
     lockdowns
-        .easy_remove(id.parse()?, &lockdown_data, &sandwich_config())
+        .easy_remove(id.parse()?)
         .await
         .map_err(|e| format!("Error while applying lockdown: {}", e))?;
 

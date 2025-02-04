@@ -13,6 +13,8 @@ use std::sync::LazyLock;
 use async_trait::async_trait;
 use crate::botlib::settings::SettingsData;
 use crate::Error;
+use serenity::all::CacheHttp;
+use silverpelt::lockdowns::LockdownData;
 
 use super::{kittycat_permission_config_data, sandwich_config, template_dispatch_data};
 
@@ -2670,7 +2672,16 @@ impl SettingCreator<SettingsData> for LockdownExecutor {
         };
 
         // Get the current lockdown set
-        let mut lockdowns = lockdowns::LockdownSet::guild(context.guild_id, &context.data.pool)
+        let mut lockdowns = lockdowns::LockdownSet::guild(
+            context.guild_id, 
+            LockdownData::new(
+                &context.serenity_context.cache,
+                context.serenity_context.http(),
+                context.data.pool.clone(),
+                context.data.reqwest.clone(),
+                sandwich_config(),
+            ),
+        )
             .await
             .map_err(|e| 
                 format!("Error while fetching lockdown set: {:?}", e)
@@ -2698,15 +2709,8 @@ impl SettingCreator<SettingsData> for LockdownExecutor {
             )
         )?;
 
-        let lockdown_data = lockdowns::LockdownData {
-            cache: &context.serenity_context.cache,
-            http: &context.serenity_context.http,
-            pool: context.data.pool.clone(),
-            reqwest: context.data.reqwest.clone(),
-        };
-
         lockdowns
-            .easy_apply(lockdown_type, &lockdown_data, reason, &sandwich_config())
+            .easy_apply(lockdown_type, reason)
             .await
             .map_err(|e| format!("Error while applying lockdown: {}", e))?;
 
@@ -2742,20 +2746,22 @@ impl SettingDeleter<SettingsData> for LockdownExecutor {
         let primary_key = primary_key.parse::<uuid::Uuid>().map_err(|e| format!("Failed to parse ID: {:?}", e))?;
 
         // Get the current lockdown set
-        let mut lockdowns = lockdowns::LockdownSet::guild(context.guild_id, &context.data.pool)
+        let mut lockdowns = lockdowns::LockdownSet::guild(
+            context.guild_id, 
+            LockdownData::new(
+                &context.serenity_context.cache,
+                context.serenity_context.http(),
+                context.data.pool.clone(),
+                context.data.reqwest.clone(),
+                sandwich_config(),
+            ),
+        )
             .await
             .map_err(|e| format!("Error while fetching lockdown set: {}", e))?;
 
-        let lockdown_data = lockdowns::LockdownData {
-            cache: &context.serenity_context.cache,
-            http: &context.serenity_context.http,
-            pool: context.data.pool.clone(),
-            reqwest: context.data.reqwest.clone(),
-        };        
-
         // Remove the lockdown
         lockdowns
-            .easy_remove(primary_key, &lockdown_data, &sandwich_config(),)
+            .easy_remove(primary_key)
             .await
             .map_err(|e| format!("Error while removing lockdown: {}", e))?;
 
