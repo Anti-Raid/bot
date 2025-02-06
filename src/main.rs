@@ -2,6 +2,7 @@ mod binutils;
 mod bot;
 mod botlib;
 mod cmds;
+mod config;
 mod rpc;
 
 pub use botlib::{Command, Context, Error};

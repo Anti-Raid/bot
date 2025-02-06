@@ -1,4 +1,4 @@
-use crate::{bot::sandwich_config, Context, Error};
+use crate::{bot::sandwich_config, config::CONFIG, Context, Error};
 use poise::{serenity_prelude::CreateEmbed, CreateReply};
 use rust_buildstats::{
     BUILD_CPU, CARGO_PROFILE, GIT_COMMIT_MSG, GIT_REPO, GIT_SHA, RUSTC_VERSION, VERSION,
@@ -56,7 +56,7 @@ pub async fn stats(ctx: Context<'_>) -> Result<(), Error> {
                 "Uptime",
                 {
                     let duration: std::time::Duration = std::time::Duration::from_secs(
-                        (chrono::Utc::now().timestamp() - config::CONFIG.start_time) as u64,
+                        (chrono::Utc::now().timestamp() - CONFIG.start_time) as u64,
                     );
 
                     let seconds = duration.as_secs() % 60;

@@ -1,4 +1,15 @@
-use crate::{bot::template_dispatch_data, Context};
+use crate::botlib::numericlistparser::{
+    parse_numeric_list, parse_numeric_list_to_str, REPLACE_CHANNEL,
+};
+use crate::{
+    bot::template_dispatch_data,
+    botlib::{
+        durationstring::parse_duration_string,
+        specialchannelallocs::create_special_allocation_from_str,
+    },
+    config::CONFIG,
+    Context,
+};
 use antiraid_types::{
     ar_event::{AntiraidEvent, ModerationAction, ModerationEndEventData, ModerationStartEventData},
     punishments::{PunishmentCreate, PunishmentState, PunishmentTarget},
@@ -16,10 +27,6 @@ use silverpelt::{
     punishments::{PunishmentCreateOperations, PunishmentOperations},
     stings::{StingCreateOperations, StingOperations},
     Error,
-};
-use splashcore_rs::utils::{
-    create_special_allocation_from_str, parse_duration_string, parse_numeric_list,
-    parse_numeric_list_to_str, Unit, REPLACE_CHANNEL,
 };
 use std::{collections::HashMap, time::Duration};
 
@@ -358,8 +365,8 @@ async fn prune(
             id: None,
             user_id: author_user_id.to_string(),
         },
-        &config::CONFIG.base_ports.jobserver_base_addr,
-        config::CONFIG.base_ports.jobserver,
+        &CONFIG.base_ports.jobserver_base_addr,
+        CONFIG.base_ports.jobserver,
     )
     .await?
     .id;
@@ -399,7 +406,7 @@ async fn prune(
         match job {
             Ok(Some(job)) => {
                 let new_job_msg = embed_job(
-                    &config::CONFIG.sites.api,
+                    &CONFIG.sites.api,
                     &job,
                     vec![CreateEmbed::default()
                         .title("Pruning User Messages...")
@@ -1079,22 +1086,13 @@ async fn timeout(
     let data = ctx.data();
 
     // Try timing them out
-    let duration = parse_duration_string(&duration)?;
+    let (duration, unit) = parse_duration_string(&duration)?;
+    let duration_secs = duration * unit.to_seconds();
 
     // Ensure less than 28 days = 4 weeks = 672 hours = 40320 minutes = 2419200 seconds
-    if duration.0 > 7 && duration.1 == Unit::Weeks {
-        return Err("Timeout duration must be less than 28 days (4 weeks)".into());
-    } else if duration.0 > 28 && duration.1 == Unit::Days {
-        return Err("Timeout duration must be less than 28 days".into());
-    } else if duration.0 > 672 && duration.1 == Unit::Hours {
-        return Err("Timeout duration must be less than 28 days (672 hours)".into());
-    } else if duration.0 > 40320 && duration.1 == Unit::Minutes {
-        return Err("Timeout duration must be less than 28 days (40320 minutes)".into());
-    } else if duration.0 > 2419200 && duration.1 == Unit::Seconds {
+    if duration * unit.to_seconds() > 2419200 {
         return Err("Timeout duration must be less than 28 days (2419200 seconds)".into());
     }
-
-    let time = (duration.0 * duration.1.to_seconds() * 1000) as i64;
 
     let stings = stings.unwrap_or(1);
 
@@ -1119,7 +1117,7 @@ async fn timeout(
         reason: Some(reason.clone()),
         action: ModerationAction::Timeout {
             member,
-            duration: (duration.0 * duration.1.to_seconds()),
+            duration: duration_secs,
         },
         author: match author {
             std::borrow::Cow::Borrowed(member) => member.clone(),
@@ -1169,9 +1167,7 @@ async fn timeout(
                 creator: StingTarget::User(author_user_id),
                 target: StingTarget::User(target_user_id),
                 state: StingState::Active,
-                duration: Some(std::time::Duration::from_secs(
-                    duration.0 * duration.1.to_seconds(),
-                )),
+                duration: Some(std::time::Duration::from_secs(duration_secs)),
                 sting_data: None,
             }
             .create_without_dispatch(&mut *tx)
@@ -1187,9 +1183,7 @@ async fn timeout(
         creator: PunishmentTarget::User(author_user_id),
         target: PunishmentTarget::User(target_user_id),
         handle_log: serde_json::json!({}),
-        duration: Some(std::time::Duration::from_secs(
-            duration.0 * duration.1.to_seconds(),
-        )),
+        duration: Some(std::time::Duration::from_secs(duration_secs)),
         reason: reason.clone(),
         data: None,
         state: PunishmentState::Active,
@@ -1203,7 +1197,8 @@ async fn timeout(
             target_user_id,
             EditMember::new()
                 .disable_communication_until(Timestamp::from_millis(
-                    Timestamp::now().unix_timestamp() * 1000 + time,
+                    Timestamp::now().unix_timestamp() * 1000
+                        + ((duration * unit.to_seconds() * 1000) as i64),
                 )?)
                 .audit_log_reason(&timeout_log_msg),
         )

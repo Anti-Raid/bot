@@ -6,6 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+chrono = { version = "0.4", features = ["serde"]}
 poise = { git = "https://github.com/Anti-Raid/poise", branch = "serenity-next" }
 log = "0.4"
 env_logger = "0.11"
@@ -15,6 +16,7 @@ dashmap = { version = "6", features = ["serde", "inline", "rayon"] }
 async-trait = "0.1"
 clap = { version = "4.5.16", features = ["derive"] }
 serde_json = "1.0"
+serde_yaml = "0.9"
 serde = "1"
 indexmap = { version = "2", features = ["serde"] }
 futures-util = "0.3"
@@ -29,7 +31,6 @@ gwevent = { git = "https://github.com/Anti-Raid/gwevent" }
 
 # Modules
 rust_rpc_server = { path = "../../core/rust/rust.rpc_server" }
-config = { path = "../../core/rust/rust.config" }
 silverpelt = { path = "../../core/rust/rust.silverpelt" }
 jobserver = { path = "../../core/rust/rust.jobserver" }
 splashcore_rs = { path = "../../core/rust/rust.std" }

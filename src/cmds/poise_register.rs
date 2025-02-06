@@ -5,6 +5,8 @@ use serenity::all::{FullEvent, HttpBuilder};
 use std::io::Write;
 use std::sync::Arc;
 
+use crate::config::CONFIG;
+
 pub async fn register_poise_commands() {
     let debug_mode = std::env::var("DEBUG").unwrap_or_default() == "true";
     let debug_opts = std::env::var("DEBUG_OPTS").unwrap_or_default();
@@ -76,8 +78,8 @@ pub async fn register_poise_commands() {
         .collect::<Vec<_>>();
 
     let http = Arc::new(
-        HttpBuilder::new(&config::CONFIG.discord_auth.token)
-            .proxy(config::CONFIG.meta.proxy.clone())
+        HttpBuilder::new(&CONFIG.discord_auth.token)
+            .proxy(CONFIG.meta.proxy.clone())
             .ratelimiter_disabled(true)
             .build(),
     );

@@ -9,6 +9,8 @@ use sqlx::postgres::PgPoolOptions;
 use std::io::Write;
 use std::sync::Once;
 
+use crate::config::CONFIG;
+
 #[derive(Parser, Debug, Clone)]
 pub struct CmdArgs {
     #[clap(long)]
@@ -66,8 +68,7 @@ async fn event_listener(
                     let opts = rust_rpc_server::CreateRpcServerOptions {
                         bind: rust_rpc_server::CreateRpcServerBind::Address(format!(
                             "{}:{}",
-                            config::CONFIG.base_ports.bot_bind_addr,
-                            config::CONFIG.base_ports.bot
+                            CONFIG.base_ports.bot_bind_addr, CONFIG.base_ports.bot
                         )),
                     };
 
@@ -158,12 +159,12 @@ pub async fn start() {
 
     info!("{:#?}", cmd_args);
 
-    let proxy_url = config::CONFIG.meta.proxy.clone();
+    let proxy_url = CONFIG.meta.proxy.clone();
 
     info!("Proxy URL: {}", proxy_url);
 
     let http = Arc::new(
-        HttpBuilder::new(&config::CONFIG.discord_auth.token)
+        HttpBuilder::new(&CONFIG.discord_auth.token)
             .proxy(proxy_url)
             .ratelimiter_disabled(true)
             .build(),
@@ -231,7 +232,7 @@ pub async fn start() {
 
     let pg_pool = PgPoolOptions::new()
         .max_connections(POSTGRES_MAX_CONNECTIONS)
-        .connect(&config::CONFIG.meta.postgres_url)
+        .connect(&CONFIG.meta.postgres_url)
         .await
         .expect("Could not initialize connection");
 
@@ -243,7 +244,7 @@ pub async fn start() {
 
     let data = Data {
         object_store: Arc::new(
-            config::CONFIG
+            CONFIG
                 .object_storage
                 .build()
                 .expect("Could not initialize object store"),

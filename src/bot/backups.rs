@@ -1,12 +1,12 @@
+use crate::botlib::numericlistparser::{parse_numeric_list, REPLACE_CHANNEL};
+use crate::botlib::specialchannelallocs::create_special_allocation_from_str;
+use crate::config::CONFIG;
 use crate::Context;
 use futures_util::StreamExt;
 use jobserver::embed::{embed as embed_job, get_icon_of_state};
 use serenity::all::{ChannelId, CreateEmbed, EditMessage};
 use serenity::small_fixed_array::TruncatingInto;
 use silverpelt::Error;
-use splashcore_rs::utils::{
-    create_special_allocation_from_str, parse_numeric_list, REPLACE_CHANNEL,
-};
 use sqlx::types::uuid::Uuid;
 use std::fmt::Display;
 use std::time::Duration;
@@ -163,8 +163,8 @@ pub async fn backups_create(
             id: None,
             user_id: ctx.author().id.to_string(),
         },
-        &config::CONFIG.base_ports.jobserver_base_addr,
-        config::CONFIG.base_ports.jobserver,
+        &CONFIG.base_ports.jobserver_base_addr,
+        CONFIG.base_ports.jobserver,
     )
     .await?
     .id;
@@ -192,7 +192,7 @@ pub async fn backups_create(
     while let Some(job) = stream.next().await {
         match job {
             Ok(Some(job)) => {
-                let new_job_msg = embed_job(&config::CONFIG.sites.api, &job, vec![], true)?;
+                let new_job_msg = embed_job(&CONFIG.sites.api, &job, vec![], true)?;
 
                 base_message
                     .edit(ctx, {
@@ -253,11 +253,7 @@ pub async fn backups_list(ctx: Context<'_>) -> Result<(), Error> {
         ));
 
         if let Some(ref output) = job.output {
-            let furl = format!(
-                "{}/jobs/{}/ioauth/download-link",
-                config::CONFIG.sites.api,
-                job.id
-            );
+            let furl = format!("{}/jobs/{}/ioauth/download-link", CONFIG.sites.api, job.id);
 
             initial_desc += &format!("\n\n:link: [Download {}]({})", output.filename, &furl);
         }
@@ -582,8 +578,8 @@ pub async fn backups_list(ctx: Context<'_>) -> Result<(), Error> {
                         id: None,
                         user_id: ctx.author().id.to_string(),
                     },
-                    &config::CONFIG.base_ports.jobserver_base_addr,
-                    config::CONFIG.base_ports.jobserver,
+                    &CONFIG.base_ports.jobserver_base_addr,
+                    CONFIG.base_ports.jobserver,
                 )
                 .await?
                 .id;
@@ -611,8 +607,7 @@ pub async fn backups_list(ctx: Context<'_>) -> Result<(), Error> {
                 while let Some(job) = stream.next().await {
                     match job {
                         Ok(Some(job)) => {
-                            let new_job_msg =
-                                embed_job(&config::CONFIG.sites.api, &job, vec![], true)?;
+                            let new_job_msg = embed_job(&CONFIG.sites.api, &job, vec![], true)?;
 
                             base_message
                                 .edit(ctx, {
@@ -1151,8 +1146,8 @@ pub async fn backups_restore(
             id: None,
             user_id: ctx.author().id.to_string(),
         },
-        &config::CONFIG.base_ports.jobserver_base_addr,
-        config::CONFIG.base_ports.jobserver,
+        &CONFIG.base_ports.jobserver_base_addr,
+        CONFIG.base_ports.jobserver,
     )
     .await?
     .id;
@@ -1180,7 +1175,7 @@ pub async fn backups_restore(
     while let Some(job) = stream.next().await {
         match job {
             Ok(Some(job)) => {
-                let new_job_msg = embed_job(&config::CONFIG.sites.api, &job, vec![], true)?;
+                let new_job_msg = embed_job(&CONFIG.sites.api, &job, vec![], true)?;
 
                 base_message
                     .edit(ctx, {

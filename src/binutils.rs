@@ -1,4 +1,4 @@
-use crate::{Context, Error};
+use crate::{config::CONFIG, Context, Error};
 use log::error;
 use silverpelt::data::Data;
 
@@ -19,7 +19,7 @@ pub async fn on_error(error: poise::FrameworkError<'_, Data, Error>) {
                         )
                         .components(vec![serenity::all::CreateActionRow::Buttons(
                             vec![serenity::all::CreateButton::new_link(
-                                &config::CONFIG.meta.support_server_invite,
+                                &CONFIG.meta.support_server_invite,
                             )
                             .label("Support Server")]
                             .into(),
@@ -52,7 +52,7 @@ pub async fn on_error(error: poise::FrameworkError<'_, Data, Error>) {
                             )
                             .components(vec![serenity::all::CreateActionRow::Buttons(
                                 vec![serenity::all::CreateButton::new_link(
-                                    &config::CONFIG.meta.support_server_invite,
+                                    &CONFIG.meta.support_server_invite,
                                 )
                                 .label("Support Server")]
                                 .into(),
@@ -86,7 +86,7 @@ pub async fn on_error(error: poise::FrameworkError<'_, Data, Error>) {
                     )
                     .components(vec![serenity::all::CreateActionRow::Buttons(vec![
                         serenity::all::CreateButton::new_link(
-                            &config::CONFIG.meta.support_server_invite,
+                            &CONFIG.meta.support_server_invite,
                         )
                         .label("Support Server"),
                     ].into())]),
@@ -122,15 +122,15 @@ Please check out the `User Guide` and use the `Website` to tailor AntiRaid to th
             serenity::all::CreateActionRow::Buttons(
                 vec![
                     serenity::all::CreateButton::new_link(
-                        config::CONFIG.sites.docs.clone(),
+                        CONFIG.sites.docs.clone(),
                     )
                     .label("User Guide"),
                     serenity::all::CreateButton::new_link(
-                        config::CONFIG.sites.frontend.clone(),
+                        CONFIG.sites.frontend.clone(),
                     )
                     .label("Website"),
                     serenity::all::CreateButton::new_link(
-                        config::CONFIG.meta.support_server_invite.clone(),
+                        CONFIG.meta.support_server_invite.clone(),
                     )
                     .label("Support Server")
                 ].into()

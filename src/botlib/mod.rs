@@ -1,6 +1,9 @@
 pub mod canonical;
+pub mod durationstring;
+pub mod numericlistparser;
 pub mod permission_checks;
 pub mod settings;
+pub mod specialchannelallocs;
 
 use silverpelt::data::Data;
 
