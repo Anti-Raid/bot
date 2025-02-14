@@ -189,10 +189,7 @@ pub async fn start() {
             ..poise::PrefixFrameworkOptions::default()
         },
         event_handler: |ctx, event| Box::pin(event_listener(ctx, event)),
-        commands: crate::bot::raw_commands()
-            .into_iter()
-            .map(|(c, _, _)| c)
-            .collect::<Vec<_>>(),
+        commands: crate::bot::raw_commands(),
         command_check: Some(|ctx| Box::pin(crate::binutils::command_check(ctx))),
         pre_command: |ctx| {
             Box::pin(async move {

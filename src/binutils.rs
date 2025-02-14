@@ -201,31 +201,5 @@ pub async fn command_check(ctx: Context<'_>) -> Result<bool, Error> {
         .await?;
     }
 
-    let command = ctx.command();
-
-    if let Err(res) = crate::botlib::permission_checks::check_command(
-        &command.qualified_name,
-        guild_id,
-        ctx.author().id,
-        &data.pool,
-        ctx.serenity_context(),
-        &data.reqwest,
-        &Some(ctx),
-    )
-    .await
-    {
-        ctx.send(
-            poise::CreateReply::new().embed(
-                serenity::all::CreateEmbed::new()
-                    .color(serenity::all::Color::RED)
-                    .title("You don't have permission to use this command?")
-                    .description(res.to_string()),
-            ),
-        )
-        .await?;
-
-        return Ok(false);
-    }
-
     Ok(true)
 }

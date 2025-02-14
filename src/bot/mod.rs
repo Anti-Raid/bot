@@ -1,3 +1,5 @@
+use std::vec;
+
 use crate::{botlib::settings::SettingsData, config::CONFIG};
 
 mod backups;
@@ -10,32 +12,41 @@ mod settings;
 mod stats;
 mod whois;
 
-pub fn raw_commands() -> Vec<(
-    crate::Command,
-    crate::botlib::permission_checks::PermissionCheck,
-    crate::botlib::CommandPermissionMetadata,
-)> {
+pub fn command_permissions_metadata() -> indexmap::IndexMap<String, Vec<String>> {
+    indexmap::indexmap! {
+        "moderation prune".to_string() => vec!["moderation.prune".to_string()],
+        "moderation kick".to_string() => vec!["moderation.kick".to_string()],
+        "moderation ban".to_string() => vec!["moderation.ban".to_string()],
+        "moderation tempban".to_string() => vec!["moderation.tempban".to_string()],
+        "moderation unban".to_string() => vec!["moderation.unban".to_string()],
+        "moderation timeout".to_string() => vec!["moderation.timeout".to_string()],
+        "lockdowns list".to_string() => vec!["lockdowns.list".to_string()],
+        "lockdowns tsl".to_string() => vec!["lockdowns.tsl".to_string()],
+        "lockdowns qsl".to_string() => vec!["lockdowns.qsl".to_string()],
+        "lockdowns scl".to_string() => vec!["lockdowns.scl".to_string()],
+        "lockdowns role".to_string() => vec!["lockdowns.role".to_string()],
+        "lockdowns remove".to_string() => vec!["lockdowns.remove".to_string()],
+        "backups create".to_string() => vec!["backups.create".to_string()],
+        "backups list".to_string() => vec!["backups.list".to_string()],
+        "backups delete".to_string() => vec!["backups.delete".to_string()],
+        "backups restore".to_string() => vec!["backups.restore".to_string()],
+        "load".to_string() => vec!["bot.load".to_string()],
+    }
+}
+
+pub fn raw_commands() -> Vec<crate::Command> {
     vec![
-        (
-            help::help(),
-            crate::botlib::permission_checks::permission_check_none,
-            indexmap::indexmap! {},
-        ),
-        (
-            stats::stats(),
-            crate::botlib::permission_checks::permission_check_none,
-            indexmap::indexmap! {},
-        ),
-        (
-            ping::ping(),
-            crate::botlib::permission_checks::permission_check_none,
-            indexmap::indexmap! {},
-        ),
-        (
-            whois::whois(),
-            crate::botlib::permission_checks::permission_check_none,
-            indexmap::indexmap! {},
-        ),
+        help::help(),
+        stats::stats(),
+        ping::ping(),
+        whois::whois(),
+        moderation::moderation(),
+        lockdowns::lockdowns(),
+        backups::backups(),
+        load::load(),
+    ]
+
+    /*vec![
         (
             moderation::moderation(),
             |command, _user_id, user_info| {
@@ -216,7 +227,7 @@ pub fn raw_commands() -> Vec<(
                 "load".to_string() => vec!["MANAGE_GUILD (Discord) *OR* bot.load (Kittycat)".to_string()],
             },
         ),
-    ]
+    ]*/
 }
 
 pub fn config_options() -> Vec<ar_settings::types::Setting<SettingsData>> {

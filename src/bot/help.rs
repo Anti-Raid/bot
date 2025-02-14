@@ -10,32 +10,6 @@ use std::fmt::Write;
 use std::sync::Arc;
 use std::time::Duration;
 
-async fn _filter(
-    ctx: &crate::Context<'_>,
-    cmd: &poise::Command<silverpelt::data::Data, silverpelt::Error>,
-) -> Result<bool, Error> {
-    let Some(guild_id) = ctx.guild_id() else {
-        return Err("You must be in a guild to use ``filter_by_perms``".into());
-    };
-
-    let data = ctx.data();
-
-    match crate::botlib::permission_checks::check_command(
-        &cmd.qualified_name,
-        guild_id,
-        ctx.author().id,
-        &ctx.data().pool,
-        ctx.serenity_context(),
-        &data.reqwest,
-        &Some(*ctx),
-    )
-    .await
-    {
-        Ok(_) => Ok(true),
-        Err(_) => Ok(false),
-    }
-}
-
 /// Struct to store embed data for the help command
 struct EmbedHelp {
     category: String,
@@ -45,7 +19,6 @@ struct EmbedHelp {
 async fn _embed_help(
     pctx: crate::Context<'_>,
     ctx: poise::FrameworkContext<'_, Data, crate::Error>,
-    filter_by_perms: Option<bool>,
 ) -> Result<Vec<EmbedHelp>, Error> {
     let mut categories = indexmap::IndexMap::<Option<String>, Vec<&Command<Data, Error>>>::new();
     for cmd in &ctx.options().commands {
@@ -119,14 +92,6 @@ async fn _embed_help(
                 for subcmd in command.subcommands.iter() {
                     if subcmd.hide_in_help {
                         continue;
-                    }
-
-                    if filter_by_perms.unwrap_or(false) {
-                        let res = _filter(&pctx, subcmd).await?;
-
-                        if !res {
-                            continue;
-                        }
                     }
 
                     let _ = writeln!(
@@ -285,11 +250,7 @@ async fn _help_send_index<Data: Send + Sync + 'static>(
 
 #[poise::command(slash_command)]
 /// Help command implementation
-pub async fn help(
-    ctx: crate::Context<'_>,
-    command: Option<String>,
-    #[description = "Only show commands you have permission to use"] filter_by_perms: Option<bool>,
-) -> Result<(), Error> {
+pub async fn help(ctx: crate::Context<'_>, command: Option<String>) -> Result<(), Error> {
     if let Some(cmd) = command {
         // They just want the parameters for a specific command
         for botcmd in &ctx.framework().options().commands {
@@ -355,7 +316,7 @@ pub async fn help(
         return Ok(());
     }
 
-    let eh = _embed_help(ctx, ctx.framework(), filter_by_perms).await?;
+    let eh = _embed_help(ctx, ctx.framework()).await?;
 
     let msg = _help_send_index(Some(ctx), None, &ctx.serenity_context().http, &eh, 0, None).await?;
 

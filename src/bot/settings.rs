@@ -22,7 +22,7 @@ async fn check_perms(
     ctx: &SettingsData,
     perm: kittycat::perms::Permission,
 ) -> Result<(), Error> {
-    crate::botlib::permission_checks::member_has_kittycat_perm(
+    crate::botlib::permission_checks::check_permissions(
         ctx.guild_id,
         ctx.author,
         &ctx.data.pool,
@@ -1033,6 +1033,16 @@ pub static GUILD_TEMPLATES: LazyLock<Setting<SettingsData>> = LazyLock::new(|| {
                 secret: false,
             },
             Column {
+                id: "paused".to_string(),
+                name: "Paused".to_string(),
+                description: "Whether the template is paused or not".to_string(),
+                column_type: ColumnType::new_scalar(InnerColumnType::Boolean {}),
+                nullable: false,
+                suggestions: ColumnSuggestion::None {},
+                ignored_for: vec![],
+                secret: false,
+            },
+            Column {
                 id: "events".to_string(),
                 name: "Events".to_string(),
                 description: "The events that this template can be dispatched on. If empty, this template is never dispatched.".to_string(),
@@ -1224,7 +1234,7 @@ impl SettingView<SettingsData> for GuildTemplateExecutor {
 
         check_perms(context,"guild_templates.view".into()).await?;
 
-        let rows = sqlx::query!("SELECT name, content, language, allowed_caps, events, error_channel, created_at, created_by, last_updated_at, last_updated_by FROM guild_templates WHERE guild_id = $1", context.guild_id.to_string())
+        let rows = sqlx::query!("SELECT name, content, language, allowed_caps, paused, events, error_channel, created_at, created_by, last_updated_at, last_updated_by FROM guild_templates WHERE guild_id = $1", context.guild_id.to_string())
         .fetch_all(&context.data.pool)
         .await
         .map_err(|e| format!("Error while fetching guild templates: {}", e))?;
@@ -1240,6 +1250,7 @@ impl SettingView<SettingsData> for GuildTemplateExecutor {
                 "allowed_caps".to_string() => {
                     Value::Array(row.allowed_caps.iter().map(|x| Value::String(x.to_string())).collect())
                 },
+                "paused".to_string() => Value::Bool(row.paused),
                 "events".to_string() => {
                     Value::Array(row.events.iter().map(|x| Value::String(x.to_string())).collect())
                 },
@@ -1300,6 +1311,10 @@ impl SettingCreator<SettingsData> for GuildTemplateExecutor {
             return Err("Missing or invalid field: `content`".into());
         };
 
+        let Some(Value::Bool(paused)) = entry.get("paused") else {
+            return Err("Missing or invalid field: `paused`".into());
+        };
+
         let events = match entry.get("events") {
             Some(Value::Array(events)) => 
                 events
@@ -1347,12 +1362,13 @@ impl SettingCreator<SettingsData> for GuildTemplateExecutor {
         };
 
         sqlx::query!(
-            "INSERT INTO guild_templates (guild_id, name, language, content, events, allowed_caps, error_channel, created_by, last_updated_by) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+            "INSERT INTO guild_templates (guild_id, name, language, content, events, paused, allowed_caps, error_channel, created_by, last_updated_by) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
             ctx.guild_id.to_string(),
             name,
             language,
             content,
             &events,
+            paused,
             &allowed_caps,
             error_channel,
             ctx.author.to_string(),
@@ -1408,6 +1424,10 @@ impl SettingUpdater<SettingsData> for GuildTemplateExecutor {
             },
         };
 
+        let Some(Value::Bool(paused)) = entry.get("paused") else {
+            return Err("Missing or invalid field: `paused`".into());
+        };
+
         let allowed_caps = match entry.get("allowed_caps") {
             Some(Value::Array(allowed_caps)) => 
                 allowed_caps
@@ -1439,7 +1459,7 @@ impl SettingUpdater<SettingsData> for GuildTemplateExecutor {
         };
 
         sqlx::query!(
-            "UPDATE guild_templates SET content = $1, events = $2, allowed_caps = $3, language = $4, last_updated_at = NOW(), last_updated_by = $5, error_channel = $6 WHERE guild_id = $7 AND name = $8",
+            "UPDATE guild_templates SET content = $1, events = $2, allowed_caps = $3, language = $4, paused = $9, last_updated_at = NOW(), last_updated_by = $5, error_channel = $6 WHERE guild_id = $7 AND name = $8",
             content,
             &events,
             &allowed_caps,
@@ -1447,7 +1467,8 @@ impl SettingUpdater<SettingsData> for GuildTemplateExecutor {
             ctx.author.to_string(),
             error_channel,
             ctx.guild_id.to_string(),
-            name
+            name,
+            paused
         )
         .execute(&ctx.data.pool)
         .await

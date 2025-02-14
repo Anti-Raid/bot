@@ -45,11 +45,6 @@ pub fn create_bot_rpc_server(
             "/base-guild-user-info/:guild_id/:user_id",
             get(base_guild_user_info),
         )
-        // Returns if the user has permission to run a command on a given guild [CheckCommandPermission]
-        .route(
-            "/check-command-permission/:guild_id/:user_id",
-            get(check_command_permission),
-        )
         // Checks if a user has a given permission [CheckPermission]
         .route(
             "/check-user-has-permission/:guild_id/:user_id",
@@ -69,12 +64,11 @@ pub static STATE_CACHE: std::sync::LazyLock<Arc<types::BotState>> =
         let mut state = types::BotState {
             commands: Vec::with_capacity(crate::bot::raw_commands().len()),
             settings: Vec::with_capacity(crate::bot::config_options().len()),
-            command_permissions: crate::botlib::CommandPermissionMetadata::new(),
+            command_permissions: crate::bot::command_permissions_metadata(),
         };
 
-        for (cmd, _, perm) in crate::bot::raw_commands() {
+        for cmd in crate::bot::raw_commands() {
             state.commands.push(cmd.into());
-            state.command_permissions.extend(perm.into_iter());
         }
 
         for setting in crate::bot::config_options() {
@@ -241,7 +235,7 @@ async fn check_user_has_permission(
     Path((guild_id, user_id)): Path<(serenity::all::GuildId, serenity::all::UserId)>,
     Json(perms): Json<types::CheckUserHasKittycatPermissionsRequest>,
 ) -> Response<types::CheckCommandPermission> {
-    let perms = crate::botlib::permission_checks::member_has_kittycat_perm(
+    let perms = crate::botlib::permission_checks::check_permissions(
         guild_id,
         user_id,
         &data.pool,
@@ -254,35 +248,6 @@ async fn check_user_has_permission(
 
     Ok(Json(types::CheckCommandPermission {
         result: match perms {
-            Ok(_) => None,
-            Err(e) => Some(e.to_string()),
-        },
-    }))
-}
-
-/// Returns if the user has permission to run a command on a given guild [CheckCommandPermission]
-async fn check_command_permission(
-    State(AppData {
-        data,
-        serenity_context,
-        ..
-    }): State<AppData>,
-    Path((guild_id, user_id)): Path<(serenity::all::GuildId, serenity::all::UserId)>,
-    Json(req): Json<types::CheckCommandPermissionRequest>,
-) -> Response<types::CheckCommandPermission> {
-    let perm_res = crate::botlib::permission_checks::check_command(
-        &req.command,
-        guild_id,
-        user_id,
-        &data.pool,
-        &serenity_context,
-        &data.reqwest,
-        &None,
-    )
-    .await;
-
-    Ok(Json(types::CheckCommandPermission {
-        result: match perm_res {
             Ok(_) => None,
             Err(e) => Some(e.to_string()),
         },

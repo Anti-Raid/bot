@@ -72,10 +72,7 @@ pub async fn register_poise_commands() {
 
     info!("Registering poise commands");
 
-    let commands = crate::bot::raw_commands()
-        .into_iter()
-        .map(|(c, _, _)| c)
-        .collect::<Vec<_>>();
+    let commands = crate::bot::raw_commands();
 
     let http = Arc::new(
         HttpBuilder::new(&CONFIG.discord_auth.token)

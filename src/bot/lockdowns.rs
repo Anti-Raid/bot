@@ -62,6 +62,17 @@ pub async fn lockdowns_list(ctx: Context<'_>) -> Result<(), Error> {
         return Err("This command can only be used in a guild".into());
     };
 
+    crate::botlib::permission_checks::check_permissions(
+        guild_id,
+        ctx.author().id,
+        &ctx.data().pool,
+        ctx.serenity_context(),
+        &ctx.data().reqwest,
+        &Some(ctx),
+        "lockdowns.list".into(),
+    )
+    .await?;
+
     let data = ctx.data();
 
     let lockdowns = lockdowns::LockdownSet::guild(
@@ -111,6 +122,17 @@ pub async fn lockdowns_tsl(ctx: Context<'_>, reason: String) -> Result<(), Error
         return Err("This command can only be used in a guild".into());
     };
 
+    crate::botlib::permission_checks::check_permissions(
+        guild_id,
+        ctx.author().id,
+        &ctx.data().pool,
+        ctx.serenity_context(),
+        &ctx.data().reqwest,
+        &Some(ctx),
+        "lockdowns.tsl".into(),
+    )
+    .await?;
+
     let data = ctx.data();
 
     // Get the current lockdown set
@@ -148,6 +170,17 @@ pub async fn lockdowns_qsl(ctx: Context<'_>, reason: String) -> Result<(), Error
     let Some(guild_id) = ctx.guild_id() else {
         return Err("This command can only be used in a guild".into());
     };
+
+    crate::botlib::permission_checks::check_permissions(
+        guild_id,
+        ctx.author().id,
+        &ctx.data().pool,
+        ctx.serenity_context(),
+        &ctx.data().reqwest,
+        &Some(ctx),
+        "lockdowns.qsl".into(),
+    )
+    .await?;
 
     let data = ctx.data();
 
@@ -190,6 +223,17 @@ pub async fn lockdowns_scl(
     let Some(guild_id) = ctx.guild_id() else {
         return Err("This command can only be used in a guild".into());
     };
+
+    crate::botlib::permission_checks::check_permissions(
+        guild_id,
+        ctx.author().id,
+        &ctx.data().pool,
+        ctx.serenity_context(),
+        &ctx.data().reqwest,
+        &Some(ctx),
+        "lockdowns.scl".into(),
+    )
+    .await?;
 
     let data = ctx.data();
     let channel = channel.unwrap_or(ctx.channel_id());
@@ -234,6 +278,17 @@ pub async fn lockdowns_role(
         return Err("This command can only be used in a guild".into());
     };
 
+    crate::botlib::permission_checks::check_permissions(
+        guild_id,
+        ctx.author().id,
+        &ctx.data().pool,
+        ctx.serenity_context(),
+        &ctx.data().reqwest,
+        &Some(ctx),
+        "lockdowns.role".into(),
+    )
+    .await?;
+
     let data = ctx.data();
 
     // Get the current lockdown set
@@ -274,6 +329,17 @@ pub async fn lockdowns_remove(
     let Some(guild_id) = ctx.guild_id() else {
         return Err("This command can only be used in a guild".into());
     };
+
+    crate::botlib::permission_checks::check_permissions(
+        guild_id,
+        ctx.author().id,
+        &ctx.data().pool,
+        ctx.serenity_context(),
+        &ctx.data().reqwest,
+        &Some(ctx),
+        "lockdowns.remove".into(),
+    )
+    .await?;
 
     let data = ctx.data();
 

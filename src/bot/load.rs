@@ -47,6 +47,17 @@ pub async fn load(
         .guild_id()
         .ok_or("You must be in a guild to use this command")?;
 
+    crate::botlib::permission_checks::check_permissions(
+        guild_id,
+        ctx.author().id,
+        &ctx.data().pool,
+        ctx.serenity_context(),
+        &ctx.data().reqwest,
+        &Some(ctx),
+        "bot.load".into(),
+    )
+    .await?;
+
     let data = ctx.data();
 
     let version = version.as_deref().unwrap_or("latest");

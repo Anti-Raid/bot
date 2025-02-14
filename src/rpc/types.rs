@@ -75,5 +75,5 @@ pub struct CheckUserHasKittycatPermissionsRequest {
 pub struct BotState {
     pub commands: Vec<crate::botlib::canonical::CanonicalCommand>,
     pub settings: Vec<ar_settings::types::Setting<SettingsData>>,
-    pub command_permissions: crate::botlib::CommandPermissionMetadata,
+    pub command_permissions: indexmap::IndexMap<String, Vec<String>>,
 }

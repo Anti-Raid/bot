@@ -244,13 +244,24 @@ async fn prune(
         String,
     >,
 ) -> Result<(), Error> {
-    if reason.len() > 512 {
-        return Err("Reason must be less than/equal to 512 characters".into());
-    }
-
     let Some(guild_id) = ctx.guild_id() else {
         return Err("This command can only be used in a guild".into());
     };
+
+    crate::botlib::permission_checks::check_permissions(
+        guild_id,
+        ctx.author().id,
+        &ctx.data().pool,
+        ctx.serenity_context(),
+        &ctx.data().reqwest,
+        &Some(ctx),
+        "moderation.prune".into(),
+    )
+    .await?;
+
+    if reason.len() > 512 {
+        return Err("Reason must be less than/equal to 512 characters".into());
+    }
 
     // Check user hierarchy before performing moderative actions
     if let Some(ref user) = user {
@@ -462,6 +473,23 @@ async fn kick(
         i32,
     >,
 ) -> Result<(), Error> {
+    let Some(guild_id) = ctx.guild_id() else {
+        return Err("This command can only be used in a guild".into());
+    };
+
+    crate::botlib::permission_checks::check_permissions(
+        guild_id,
+        ctx.author().id,
+        &ctx.data().pool,
+        ctx.serenity_context(),
+        &ctx.data().reqwest,
+        &Some(ctx),
+        "moderation.kick".into(),
+    )
+    .await?;
+
+    let data = ctx.data();
+
     if reason.len() > 384 {
         return Err("Reason must be less than/equal to 384 characters".into());
     }
@@ -471,12 +499,6 @@ async fn kick(
     if stings < 0 {
         return Err("Stings must be greater than or equal to 0".into());
     }
-
-    let Some(guild_id) = ctx.guild_id() else {
-        return Err("This command can only be used in a guild".into());
-    };
-
-    let data = ctx.data();
 
     // Dispatch event to modules, erroring out if the dispatch errors (e.g. limits hit due to a lua template etc)
     let Some(author) = ctx.author_member().await else {
@@ -618,13 +640,24 @@ async fn ban(
     >,
     #[description = "How many messages to prune using discords autopruner [dmd] (days)"] prune_dmd: Option<u8>,
 ) -> Result<(), Error> {
-    if reason.len() > 384 {
-        return Err("Reason must be less than/equal to 384 characters".into());
-    }
-
     let Some(guild_id) = ctx.guild_id() else {
         return Err("This command can only be used in a guild".into());
     };
+
+    crate::botlib::permission_checks::check_permissions(
+        guild_id,
+        ctx.author().id,
+        &ctx.data().pool,
+        ctx.serenity_context(),
+        &ctx.data().reqwest,
+        &Some(ctx),
+        "moderation.ban".into(),
+    )
+    .await?;
+
+    if reason.len() > 384 {
+        return Err("Reason must be less than/equal to 384 characters".into());
+    }
 
     let stings = stings.unwrap_or(1);
 
@@ -779,13 +812,24 @@ async fn tempban(
     #[description = "The duration of the ban"] duration: String,
     #[description = "How many messages to prune using discords autopruner [dmd] (days)"] prune_dmd: Option<u8>,
 ) -> Result<(), Error> {
-    if reason.len() > 384 {
-        return Err("Reason must be less than/equal to 384 characters".into());
-    }
-
     let Some(guild_id) = ctx.guild_id() else {
         return Err("This command can only be used in a guild".into());
     };
+
+    crate::botlib::permission_checks::check_permissions(
+        guild_id,
+        ctx.author().id,
+        &ctx.data().pool,
+        ctx.serenity_context(),
+        &ctx.data().reqwest,
+        &Some(ctx),
+        "moderation.tempban".into(),
+    )
+    .await?;
+
+    if reason.len() > 384 {
+        return Err("Reason must be less than/equal to 384 characters".into());
+    }
 
     let stings = stings.unwrap_or(1);
 
@@ -943,13 +987,24 @@ async fn unban(
     reason: String,
     #[description = "Number of stings to give. Defaults to 0"] stings: Option<i32>,
 ) -> Result<(), Error> {
-    if reason.len() > 384 {
-        return Err("Reason must be less than/equal to 384 characters".into());
-    }
-
     let Some(guild_id) = ctx.guild_id() else {
         return Err("This command can only be used in a guild".into());
     };
+
+    crate::botlib::permission_checks::check_permissions(
+        guild_id,
+        ctx.author().id,
+        &ctx.data().pool,
+        ctx.serenity_context(),
+        &ctx.data().reqwest,
+        &Some(ctx),
+        "moderation.unban".into(),
+    )
+    .await?;
+
+    if reason.len() > 384 {
+        return Err("Reason must be less than/equal to 384 characters".into());
+    }
 
     let stings = stings.unwrap_or(1);
 
@@ -1075,15 +1130,26 @@ async fn timeout(
         i32,
     >,
 ) -> Result<(), Error> {
-    if reason.len() > 384 {
-        return Err("Reason must be less than/equal to 384 characters".into());
-    }
-
     let Some(guild_id) = ctx.guild_id() else {
         return Err("This command can only be used in a guild".into());
     };
 
+    crate::botlib::permission_checks::check_permissions(
+        guild_id,
+        ctx.author().id,
+        &ctx.data().pool,
+        ctx.serenity_context(),
+        &ctx.data().reqwest,
+        &Some(ctx),
+        "moderation.timeout".into(),
+    )
+    .await?;
+
     let data = ctx.data();
+
+    if reason.len() > 384 {
+        return Err("Reason must be less than/equal to 384 characters".into());
+    }
 
     // Try timing them out
     let (duration, unit) = parse_duration_string(&duration)?;

@@ -88,6 +88,17 @@ pub async fn backups_create(
         return Err("This command can only be used in a guild".into());
     };
 
+    crate::botlib::permission_checks::check_permissions(
+        guild_id,
+        ctx.author().id,
+        &ctx.data().pool,
+        ctx.serenity_context(),
+        &ctx.data().reqwest,
+        &Some(ctx),
+        "backups.create".into(),
+    )
+    .await?;
+
     let messages = messages.unwrap_or(false);
     let attachments = attachments.unwrap_or(false);
     let backup_guild_assets = backup_guild_assets.unwrap_or_default();
@@ -224,6 +235,17 @@ pub async fn backups_list(ctx: Context<'_>) -> Result<(), Error> {
     let Some(guild_id) = ctx.guild_id() else {
         return Err("This command can only be used in a guild".into());
     };
+
+    crate::botlib::permission_checks::check_permissions(
+        guild_id,
+        ctx.author().id,
+        &ctx.data().pool,
+        ctx.serenity_context(),
+        &ctx.data().reqwest,
+        &Some(ctx),
+        "backups.list".into(),
+    )
+    .await?;
 
     let data = ctx.data();
 
@@ -366,14 +388,14 @@ pub async fn backups_list(ctx: Context<'_>) -> Result<(), Error> {
             }
             "backups_restore" => {
                 // Check permission
-                if let Err(perm_res) = crate::botlib::permission_checks::check_command(
-                    "backups restore",
+                if let Err(perm_res) = crate::botlib::permission_checks::check_permissions(
                     guild_id,
                     ctx.author().id,
                     &ctx.data().pool,
                     ctx.serenity_context(),
                     &data.reqwest,
                     &Some(ctx),
+                    "backups.restore".into(),
                 )
                 .await
                 {
@@ -632,14 +654,14 @@ pub async fn backups_list(ctx: Context<'_>) -> Result<(), Error> {
             }
             "backups_delete" => {
                 // Check permission
-                if let Err(perm_res) = crate::botlib::permission_checks::check_command(
-                    "backups delete",
+                if let Err(perm_res) = crate::botlib::permission_checks::check_permissions(
                     guild_id,
                     ctx.author().id,
                     &ctx.data().pool,
                     ctx.serenity_context(),
                     &data.reqwest,
                     &Some(ctx),
+                    "backups.delete".into(),
                 )
                 .await
                 {
@@ -824,9 +846,28 @@ pub async fn backups_list(ctx: Context<'_>) -> Result<(), Error> {
 /// Deletes a backup given its Task ID
 #[poise::command(slash_command, guild_only, user_cooldown = "5", rename = "delete")]
 pub async fn backups_delete(ctx: Context<'_>, id: String) -> Result<(), Error> {
+    let Some(guild_id) = ctx.guild_id() else {
+        return Err("This command can only be used in a guild".into());
+    };
+
+    crate::botlib::permission_checks::check_permissions(
+        guild_id,
+        ctx.author().id,
+        &ctx.data().pool,
+        ctx.serenity_context(),
+        &ctx.data().reqwest,
+        &Some(ctx),
+        "backups.delete".into(),
+    )
+    .await?;
+
     let job = jobserver::Job::from_id(id.parse::<Uuid>()?, &ctx.data().pool)
         .await
         .map_err(|e| format!("Failed to get backup job: {}", e))?;
+
+    if job.guild_id != guild_id {
+        return Err("Backup is not owned by this server".into());
+    }
 
     let mut confirm = ctx.send(
         poise::reply::CreateReply::default()
@@ -1038,6 +1079,17 @@ pub async fn backups_restore(
     let Some(guild_id) = ctx.guild_id() else {
         return Err("This command can only be used in a guild".into());
     };
+
+    crate::botlib::permission_checks::check_permissions(
+        guild_id,
+        ctx.author().id,
+        &ctx.data().pool,
+        ctx.serenity_context(),
+        &ctx.data().reqwest,
+        &Some(ctx),
+        "backups.restore".into(),
+    )
+    .await?;
 
     if backup_file.is_some() && backup_id.is_some() {
         return Err("You can only provide either a backup file or a backup id".into());
