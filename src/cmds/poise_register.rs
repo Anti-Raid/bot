@@ -5,6 +5,7 @@ use serenity::all::{FullEvent, HttpBuilder};
 use std::io::Write;
 use std::sync::Arc;
 
+use crate::bot::commands_to_register;
 use crate::config::CONFIG;
 
 pub async fn register_poise_commands() {
@@ -72,8 +73,6 @@ pub async fn register_poise_commands() {
 
     info!("Registering poise commands");
 
-    let commands = crate::bot::raw_commands();
-
     let http = Arc::new(
         HttpBuilder::new(&CONFIG.discord_auth.token)
             .proxy(CONFIG.meta.proxy.clone())
@@ -87,7 +86,7 @@ pub async fn register_poise_commands() {
         .expect("Failed to get application info");
     http.set_application_id(app.id);
 
-    let commands_builder = poise::builtins::create_application_commands(&commands);
+    let commands_builder = commands_to_register();
     let num_commands = commands_builder.len();
 
     println!("Registering {} commands", num_commands);
