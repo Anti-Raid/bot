@@ -39,9 +39,9 @@ async fn check_perms(
 
 pub static GUILD_ROLES: LazyLock<Setting<SettingsData>> = LazyLock::new(|| {
     Setting {
-        id: "guild_roles".to_string(),
+        id: "roles".to_string(),
         name: "Server Roles".to_string(),
-        description: "Configure/setup server roles which can then have permissions on AntiRaid".to_string(),
+        description: "Configure server roles permissions on AntiRaid".to_string(),
         primary_key: "role_id".to_string(),
         columns: settings_wrap(vec![
             ar_settings::common_columns::guild_id("guild_id", "Guild ID", "The Guild ID"),
@@ -981,16 +981,16 @@ impl SettingDeleter<SettingsData> for GuildMembersExecutor {
 
 pub static GUILD_TEMPLATES: LazyLock<Setting<SettingsData>> = LazyLock::new(|| {
     Setting {
-        id: "guild_templates".to_string(),
-        name: "Server Templates".to_string(),
-        description: "Configure/Setup Server Templates (Lua/Roblox Luau scripts)".to_string(),
+        id: "scripts".to_string(),
+        name: "Scripts".to_string(),
+        description: "Configure your servers' custom scripts.".to_string(),
         primary_key: "name".to_string(),
         columns: settings_wrap(vec![
             ar_settings::common_columns::guild_id("guild_id", "Guild ID", "The Guild ID"),
             Column {
                 id: "name".to_string(),
                 name: "Name".to_string(),
-                description: "The name to give to the template".to_string(),
+                description: "The name to give to the script".to_string(),
                 column_type: ColumnType::new_scalar(InnerColumnType::String {
                     kind: "normal".to_string(),
                     min_length: None,
@@ -1005,7 +1005,7 @@ pub static GUILD_TEMPLATES: LazyLock<Setting<SettingsData>> = LazyLock::new(|| {
             Column {
                 id: "language".to_string(),
                 name: "Language".to_string(),
-                description: "The language of the template. Only Roblox Luau is currently supported here.".to_string(),
+                description: "The language of the script. Only Roblox Luau is currently supported here.".to_string(),
                 column_type: ColumnType::new_scalar(InnerColumnType::String {
                     kind: "normal".to_string(),
                     min_length: None,
@@ -1020,7 +1020,7 @@ pub static GUILD_TEMPLATES: LazyLock<Setting<SettingsData>> = LazyLock::new(|| {
             Column {
                 id: "content".to_string(),
                 name: "Content".to_string(),
-                description: "The content of the template".to_string(),
+                description: "The content of the script".to_string(),
                 column_type: ColumnType::new_scalar(InnerColumnType::String {
                     kind: "template".to_string(),
                     min_length: None,
@@ -1035,7 +1035,7 @@ pub static GUILD_TEMPLATES: LazyLock<Setting<SettingsData>> = LazyLock::new(|| {
             Column {
                 id: "paused".to_string(),
                 name: "Paused".to_string(),
-                description: "Whether the template is paused or not".to_string(),
+                description: "Whether the script is paused or not".to_string(),
                 column_type: ColumnType::new_scalar(InnerColumnType::Boolean {}),
                 nullable: false,
                 suggestions: ColumnSuggestion::None {},
@@ -1045,7 +1045,7 @@ pub static GUILD_TEMPLATES: LazyLock<Setting<SettingsData>> = LazyLock::new(|| {
             Column {
                 id: "events".to_string(),
                 name: "Events".to_string(),
-                description: "The events that this template can be dispatched on. If empty, this template is never dispatched.".to_string(),
+                description: "The events that this script can be executed on.".to_string(),
                 column_type: ColumnType::new_array(InnerColumnType::String { 
                     min_length: None, 
                     max_length: None, 
@@ -1069,7 +1069,7 @@ pub static GUILD_TEMPLATES: LazyLock<Setting<SettingsData>> = LazyLock::new(|| {
             Column {
                 id: "allowed_caps".to_string(),
                 name: "Capabilities".to_string(),
-                description: "The capabilities the template will have.".to_string(),
+                description: "The capabilities the script will have.".to_string(),
                 column_type: ColumnType::new_array(InnerColumnType::String { min_length: None, max_length: None, allowed_values: vec![], kind: "normal".to_string() }),
                 nullable: true,
                 suggestions: ColumnSuggestion::Static {
@@ -1083,7 +1083,7 @@ pub static GUILD_TEMPLATES: LazyLock<Setting<SettingsData>> = LazyLock::new(|| {
             Column {
                 id: "error_channel".to_string(),
                 name: "Error Channel".to_string(),
-                description: "The channel to report errors to. If not specified, an Error event will be omitted instead".to_string(),
+                description: "The channel to report any errors to".to_string(),
                 column_type: ColumnType::new_scalar(InnerColumnType::String {
                     kind: "channel".to_string(),
                     min_length: None,
@@ -1380,7 +1380,21 @@ impl SettingCreator<SettingsData> for GuildTemplateExecutor {
 
         self.post_action(ctx, name).await?;
 
-        Ok(entry)
+        Ok(indexmap::indexmap! {
+            "guild_id".to_string() => Value::String(ctx.guild_id.to_string()),
+            "name".to_string() => Value::String(name.to_string()),
+            "language".to_string() => Value::String(language.to_string()),
+            "content".to_string() => Value::String(content.to_string()),
+            "events".to_string() => Value::Array(events.iter().map(|x| Value::String(x.to_string())).collect()),
+            "paused".to_string() => Value::Bool(*paused),
+            "allowed_caps".to_string() => Value::Array(allowed_caps.iter().map(|x| Value::String(x.to_string())).collect()),
+            "error_channel".to_string() => {
+                match error_channel {
+                    Some(error_channel) => Value::String(error_channel),
+                    None => Value::Null,
+                }
+            },
+        })
     }
 }
 
@@ -1523,9 +1537,9 @@ impl SettingDeleter<SettingsData> for GuildTemplateExecutor {
 }
 
 pub static GUILD_TEMPLATES_KV: LazyLock<Setting<SettingsData>> = LazyLock::new(|| Setting {
-    id: "guild_templates_kv".to_string(),
-    name: "Server Templates (key-value db)".to_string(),
-    description: "Key-value database available to templates on this server".to_string(),
+    id: "script_kv".to_string(),
+    name: "Scripts (key-value db)".to_string(),
+    description: "Key-value database available to scripts on this server".to_string(),
     primary_key: "key".to_string(),
     columns: settings_wrap(vec![
         ar_settings::common_columns::guild_id("guild_id", "Guild ID", "The Guild ID"),
@@ -1763,15 +1777,15 @@ impl SettingDeleter<SettingsData> for GuildTemplatesKVExecutor {
 
 pub static GUILD_TEMPLATE_SHOP: LazyLock<Setting<SettingsData>> = LazyLock::new(|| {
     Setting {
-        id: "template_shop".to_string(),
-        name: "Created/Published Templates".to_string(),
-        description: "Publish new templates to the shop that can be used by any other server".to_string(),
+        id: "script_shop".to_string(),
+        name: "Created/Published Scripts".to_string(),
+        description: "Publish new scripts to the shop that can be used by any other server".to_string(),
         primary_key: "id".to_string(),
         columns: settings_wrap(vec![
             Column {
                 id: "id".to_string(),
                 name: "ID".to_string(),
-                description: "The internal ID of the template".to_string(),
+                description: "The internal ID of the script".to_string(),
                 column_type: ColumnType::new_scalar(InnerColumnType::String {
                     min_length: Some(30),
                     max_length: Some(64),
@@ -1786,7 +1800,7 @@ pub static GUILD_TEMPLATE_SHOP: LazyLock<Setting<SettingsData>> = LazyLock::new(
             Column {
                 id: "name".to_string(),
                 name: "Name".to_string(),
-                description: "The name of the template on the shop. Cannot be updated once set".to_string(),
+                description: "The name of the script on the shop. Cannot be updated once set".to_string(),
                 column_type: ColumnType::new_scalar(InnerColumnType::String {
                     kind: "normal".to_string(),
                     min_length: None,
@@ -1801,7 +1815,7 @@ pub static GUILD_TEMPLATE_SHOP: LazyLock<Setting<SettingsData>> = LazyLock::new(
             Column {
                 id: "friendly_name".to_string(),
                 name: "Friendly Name".to_string(),
-                description: "The friendly name of the template on the shop.".to_string(),
+                description: "The friendly name of the script on the shop.".to_string(),
                 column_type: ColumnType::new_scalar(InnerColumnType::String {
                     kind: "normal".to_string(),
                     min_length: None,
@@ -1816,7 +1830,7 @@ pub static GUILD_TEMPLATE_SHOP: LazyLock<Setting<SettingsData>> = LazyLock::new(
             Column {
                 id: "language".to_string(),
                 name: "Language".to_string(),
-                description: "The language of the template. Only Roblox Luau is currently supported here. Cannot be updated once set".to_string(),
+                description: "The language of the script. Only Roblox Luau is currently supported here. Cannot be updated once set".to_string(),
                 column_type: ColumnType::new_scalar(InnerColumnType::String {
                     kind: "normal".to_string(),
                     min_length: None,
@@ -1846,7 +1860,7 @@ pub static GUILD_TEMPLATE_SHOP: LazyLock<Setting<SettingsData>> = LazyLock::new(
             Column {
                 id: "description".to_string(),
                 name: "Description".to_string(),
-                description: "The description of the template".to_string(), 
+                description: "The description of the script".to_string(), 
                 column_type: ColumnType::new_scalar(InnerColumnType::String {
                     kind: "normal".to_string(),
                     min_length: None,
@@ -1861,7 +1875,7 @@ pub static GUILD_TEMPLATE_SHOP: LazyLock<Setting<SettingsData>> = LazyLock::new(
             Column {
                 id: "content".to_string(),
                 name: "Content".to_string(),
-                description: "The content of the template. Cannot be updated once set (use a new version for that)".to_string(),
+                description: "The content of the script. Cannot be updated once set (use a new version for that)".to_string(),
                 column_type: ColumnType::new_scalar(InnerColumnType::String {
                     kind: "template".to_string(),
                     min_length: None,
@@ -1876,7 +1890,7 @@ pub static GUILD_TEMPLATE_SHOP: LazyLock<Setting<SettingsData>> = LazyLock::new(
             Column {
                 id: "events".to_string(),
                 name: "Events".to_string(),
-                description: "The events this template should have access to, Cannot be changed once set".to_string(),
+                description: "The events that this script should be executed on., Cannot be changed once set".to_string(),
                 column_type: ColumnType::new_array(InnerColumnType::String {
                     kind: "normal".to_string(),
                     min_length: None,
@@ -1900,7 +1914,7 @@ pub static GUILD_TEMPLATE_SHOP: LazyLock<Setting<SettingsData>> = LazyLock::new(
             Column {
                 id: "allowed_caps".to_string(),
                 name: "Capabilities".to_string(),
-                description: "The capabilities the template needs to perform its full functionality. Cannot be changed once set".to_string(),
+                description: "The capabilities the script needs to perform its full functionality. Cannot be changed once set".to_string(),
                 column_type: ColumnType::new_array(InnerColumnType::String { min_length: None, max_length: None, allowed_values: vec![], kind: "normal".to_string() }),
                 nullable: true,
                 suggestions: ColumnSuggestion::Static {
@@ -1914,7 +1928,7 @@ pub static GUILD_TEMPLATE_SHOP: LazyLock<Setting<SettingsData>> = LazyLock::new(
             Column {
                 id: "type".to_string(),
                 name: "Type".to_string(),
-                description: "The type of the template".to_string(),
+                description: "The type of the script".to_string(),
                 column_type: ColumnType::new_scalar(InnerColumnType::String {
                     kind: "normal".to_string(),
                     min_length: None,

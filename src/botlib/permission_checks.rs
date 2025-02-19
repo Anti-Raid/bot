@@ -65,10 +65,26 @@ pub async fn check_permissions(
         &perm_check_data.user_info.kittycat_resolved_permissions,
         &perm_check_data.perm,
     ) {
+        // Get users top role based on position and created_at
+        let mut member_roles = perm_check_data
+            .user_info
+            .member_roles
+            .iter()
+            .filter_map(|r| perm_check_data.user_info.guild_roles.get(r))
+            .collect::<Vec<_>>();
+
+        // Sort the member_roles
+        member_roles.sort();
+
+        // Get top role
+        let top_role = member_roles.last().unwrap();
+
         return Err(
             format!("You need the ``{}`` permission to use this command!
             
-Please ask the server administrator to login to the dashboard and give your role this permission if you think this is a mistake!", 
+Please ask the server administrator to run ``/settings roles add role:{} perms:{}`` to give you this permission.", 
+            top_role, 
+            guild_id,
             perm_check_data.perm).into()
         );
     }

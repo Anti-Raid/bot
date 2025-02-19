@@ -2,6 +2,8 @@ use crate::{config::CONFIG, Context, Error};
 use log::error;
 use silverpelt::data::Data;
 
+const BOT_ONBOARDING_VERSION: i32 = 2;
+
 /// Standard error handler for Anti-Raid
 pub async fn on_error(error: poise::FrameworkError<'_, Data, Error>) {
     match error {
@@ -109,12 +111,16 @@ fn setup_message<'a>() -> poise::CreateReply<'a> {
     poise::CreateReply::new()
     .embed(
         serenity::all::CreateEmbed::new()
-        .title("Thank you for adding AntiRaid")
-        .description(r#"While you have successfully added AntiRaid to your server, it won't do much until you take some time to configure it to your needs.
+        .title("Hi there!")
+        .description(r#"Here are some of the cool things you can do with AntiRaid:
+
+**Scripting:** AntiRaid allows you to write custom scripts to for total flexibility and control over your server...
+**Server Backups:** AntiRaid features downloadable backups which can then be restored even in the event of disaster!
+**Lockdowns:** AntiRaid can lockdown your server in the event of a raid. And for automation, scripts can make lockdowns automatically as well!!!
 
 Please check out the `User Guide` and use the `Website` to tailor AntiRaid to the needs of your server! And, if you need help, feel free to join our `Support Server`!  
 
-*Note: Feel free to rerun the command you were trying to run once you're content with your AntiRaid configuration*
+*Note: Feel free to rerun the command you were trying to run once you're content with your servers' configuration*
         "#)
     )
     .components(
@@ -149,20 +155,21 @@ pub async fn command_check(ctx: Context<'_>) -> Result<bool, Error> {
     let data = ctx.data();
 
     let guild_onboarding_status = sqlx::query!(
-        "SELECT finished_onboarding FROM guilds WHERE id = $1",
+        "SELECT bot_onboarding_seen_ver FROM guilds WHERE id = $1",
         guild_id.to_string()
     )
     .fetch_optional(&data.pool)
     .await?;
 
     if let Some(guild_onboarding_status) = guild_onboarding_status {
-        if !guild_onboarding_status.finished_onboarding {
+        if guild_onboarding_status.bot_onboarding_seen_ver != BOT_ONBOARDING_VERSION {
             // Send setup message instead
             ctx.send(setup_message()).await?;
 
             // Set onboarding status to true
             sqlx::query!(
-                "UPDATE guilds SET finished_onboarding = true WHERE id = $1",
+                "UPDATE guilds SET bot_onboarding_seen_ver = $1 WHERE id = $2",
+                BOT_ONBOARDING_VERSION,
                 guild_id.to_string()
             )
             .execute(&data.pool)
@@ -173,8 +180,9 @@ pub async fn command_check(ctx: Context<'_>) -> Result<bool, Error> {
     } else {
         // Guild not found, create it
         sqlx::query!(
-            "INSERT INTO guilds (id, finished_onboarding) VALUES ($1, true)",
-            guild_id.to_string()
+            "INSERT INTO guilds (id, bot_onboarding_seen_ver) VALUES ($1, $2)",
+            guild_id.to_string(),
+            BOT_ONBOARDING_VERSION
         )
         .execute(&data.pool)
         .await?;
