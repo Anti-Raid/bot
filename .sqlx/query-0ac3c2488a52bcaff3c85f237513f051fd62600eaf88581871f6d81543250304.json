@@ -1,0 +1,70 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, name, output, statuses, expiry, state, created_at, fields, resumable FROM jobs WHERE guild_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "output",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 3,
+        "name": "statuses",
+        "type_info": "JsonbArray"
+      },
+      {
+        "ordinal": 4,
+        "name": "expiry",
+        "type_info": "Interval"
+      },
+      {
+        "ordinal": 5,
+        "name": "state",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "created_at",
+        "type_info": "Timestamp"
+      },
+      {
+        "ordinal": 7,
+        "name": "fields",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 8,
+        "name": "resumable",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "0ac3c2488a52bcaff3c85f237513f051fd62600eaf88581871f6d81543250304"
+}
