@@ -107,7 +107,7 @@ pub async fn start() {
     let mut env_builder = env_logger::builder();
 
     let default_filter =
-        "serenity=error,rust_bot=info,bot_binutils=info,rust_rpc_server=info,rust_rpc_server_bot=info,botox=info,templating=debug,sqlx=error".to_string();
+        "serenity=error,bot=info,bot_binutils=info,rust_rpc_server=info,rust_rpc_server_bot=info,botox=info,templating=debug,sqlx=error".to_string();
 
     env_builder
         .format(move |buf, record| {
@@ -254,6 +254,8 @@ pub async fn start() {
         pool: pg_pool.clone(),
         reqwest,
     };
+
+    log::info!("Creating serenity client");
 
     let mut client = client_builder
         .framework(framework)
