@@ -30,10 +30,10 @@ lockdowns = { git = "https://github.com/Anti-Raid/lockdowns" }
 gwevent = { git = "https://github.com/Anti-Raid/gwevent" }
 
 # Modules
-rust_rpc_server = { path = "../../core/rust/rust.rpc_server" }
-silverpelt = { path = "../../core/rust/rust.silverpelt" }
-jobserver = { path = "../../core/rust/rust.jobserver" }
-sandwich_driver = { path = "../../core/rust/rust.sandwich_driver" }
+rust_rpc_server = { git = "https://github.com/Anti-Raid/corelib_rs" }
+silverpelt = { git = "https://github.com/Anti-Raid/corelib_rs" }
+jobserver = { git = "https://github.com/Anti-Raid/corelib_rs" }
+sandwich_driver = { git = "https://github.com/Anti-Raid/corelib_rs" }
 rust_buildstats = { path = "./crates/rust.buildstats" }
 
 [dependencies.tokio]
