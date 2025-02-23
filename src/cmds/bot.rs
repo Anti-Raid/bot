@@ -107,7 +107,7 @@ pub async fn start() {
     let mut env_builder = env_logger::builder();
 
     let default_filter =
-        "serenity=error,bot=info,bot_binutils=info,rust_rpc_server=info,rust_rpc_server_bot=info,botox=info,templating=debug,sqlx=error".to_string();
+        "serenity=error,bot=info,bot_binutils=info,rust_rpc_server=info,rust_rpc_server_bot=info,botox=info,sqlx=error".to_string();
 
     env_builder
         .format(move |buf, record| {
