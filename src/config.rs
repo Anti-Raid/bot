@@ -129,22 +129,6 @@ impl Config {
 
                 cfg.start_time = chrono::Utc::now().timestamp();
 
-                if let Ok(e) = std::env::var("PROXY_URL") {
-                    cfg.meta.proxy = e;
-                }
-
-                if let Ok(pg_url) = std::env::var("POSTGRES_URL") {
-                    cfg.meta.postgres_url = pg_url;
-                }
-
-                if let Ok(sandwich_url) = std::env::var("SANDWICH_URL") {
-                    cfg.meta.sandwich_http_api = sandwich_url;
-                }
-
-                if let Ok(template_worker_url) = std::env::var("TEMPLATE_WORKER_URL") {
-                    cfg.base_ports.template_worker_addr = template_worker_url;
-                }
-
                 // Return config
                 Ok(cfg)
             }
