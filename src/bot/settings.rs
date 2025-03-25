@@ -1625,7 +1625,7 @@ impl SettingCreator<SettingsData> for GuildTemplatesKVExecutor {
             return Err("Missing or invalid field: `key`".into());
         };
 
-        let total_count = sqlx::query!(
+        let total_count: i64 = sqlx::query!(
             "SELECT COUNT(*) FROM guild_templates_kv WHERE guild_id = $1",
             ctx.guild_id.to_string()
         )
@@ -1636,10 +1636,7 @@ impl SettingCreator<SettingsData> for GuildTemplatesKVExecutor {
         .unwrap_or_default();
 
         if total_count
-            >= silverpelt::templates::LuaKVConstraints::default()
-                .max_keys
-                .try_into()
-                .map_err(|_| "Failed to convert max_keys to i64".to_string())?
+            >= TryInto::<i64>::try_into(silverpelt::templates::LuaKVConstraints::default().max_keys)?
         {
             return Err("Max key-value pairs reached".into());
         }
