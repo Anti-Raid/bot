@@ -10,13 +10,20 @@ pub async fn load_autocomplete<'a>(
 ) -> serenity::all::CreateAutocompleteResponse<'a> {
     let data = ctx.data();
 
-    match sqlx::query!(
+    #[derive(sqlx::FromRow)]
+    struct TemplateRecord {
+        name: String,
+        friendly_name: String,
+    }
+
+    match sqlx::query_as(
         "SELECT DISTINCT name, friendly_name FROM template_shop WHERE name ILIKE $1 OR friendly_name ILIKE $1",
-        format!("%{}%", partial.replace('%', "\\%").replace('_', "\\_")),
     )
+    .bind(format!("%{}%", partial.replace('%', "\\%").replace('_', "\\_")))
     .fetch_all(&data.pool)
     .await {
         Ok(templates) => {
+            let templates: Vec<TemplateRecord> = templates;
             let mut choices = serenity::all::CreateAutocompleteResponse::new();
 
             for template in templates {
@@ -62,43 +69,40 @@ pub async fn load(
 
     let version = version.as_deref().unwrap_or("latest");
 
-    let (version, description, events, language, allowed_caps) = {
+    #[derive(sqlx::FromRow)]
+    struct LoadData {
+        version: String,
+        description: String,
+        events: Vec<String>,
+        language: String,
+        allowed_caps: Vec<String>,
+    }
+
+    let rec = {
         if version == "latest" {
-            let rec = sqlx::query!(
+            let rec: Option<LoadData> = sqlx::query_as(
                 "SELECT version, description, events, language, allowed_caps FROM template_shop WHERE name = $1 ORDER BY version DESC LIMIT 1",
-                template_name,
             )
+            .bind(&template_name)
             .fetch_optional(&data.pool)
             .await?;
 
             if let Some(rec) = rec {
-                (
-                    rec.version,
-                    rec.description,
-                    rec.events,
-                    rec.language,
-                    rec.allowed_caps,
-                )
+                rec
             } else {
                 return Err("No template with that name found in the shop".into());
             }
         } else {
-            let rec = sqlx::query!(
+            let rec: Option<LoadData> = sqlx::query_as(
                 "SELECT version, description, events, language, allowed_caps FROM template_shop WHERE name = $1 AND version = $2",
-                template_name,
-                version,
             )
+            .bind(&template_name)
+            .bind(version)
             .fetch_optional(&data.pool)
             .await?;
 
             if let Some(rec) = rec {
-                (
-                    rec.version,
-                    rec.description,
-                    rec.events,
-                    rec.language,
-                    rec.allowed_caps,
-                )
+                rec
             } else {
                 return Err("No template with that name and version found in the shop".into());
             }
@@ -115,30 +119,31 @@ pub async fn load(
                         .description(format!(
                             "Are you sure you want to load the template `{} v{}`?",
                             template_name.replace('`', "\\`"),
-                            version.replace('`', "\\`")
+                            rec.version.replace('`', "\\`")
                         ))
                         .field(
                             "Description",
-                            if description.len() > 300 {
-                                format!("{}...", &description[..300])
+                            if rec.description.len() > 300 {
+                                format!("{}...", &rec.description[..300])
                             } else {
-                                description
+                                rec.description
                             },
                             false,
                         )
                         .field(
                             "Language",
-                            if language.len() > 300 {
-                                format!("{}...", &language[..300])
+                            if rec.language.len() > 300 {
+                                format!("{}...", &rec.language[..300])
                             } else {
-                                language
+                                rec.language
                             },
                             false,
                         )
                         .field(
                             "Events",
                             {
-                                let events_str = events
+                                let events_str = rec
+                                    .events
                                     .iter()
                                     .map(|e| e.to_lowercase())
                                     .collect::<Vec<_>>()
@@ -154,7 +159,7 @@ pub async fn load(
                         .field(
                             "Capabilities",
                             {
-                                let allowed_caps_str = allowed_caps.join(", ");
+                                let allowed_caps_str = rec.allowed_caps.join(", ");
                                 if allowed_caps_str.len() > 300 {
                                     format!("``{}...``", &allowed_caps_str[..300])
                                 } else {
@@ -200,21 +205,20 @@ pub async fn load(
     }
 
     // Add template to servers list of templates
-    let name = silverpelt::templates::create_shop_template(&template_name, &version);
-    sqlx::query!(
+    let name = silverpelt::templates::create_shop_template(&template_name, version);
+    sqlx::query(
         "INSERT INTO guild_templates (guild_id, name, content, events, allowed_caps, error_channel, created_by, last_updated_by) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
-        guild_id.to_string(),
-        &name,
-        "".to_string(),
-        &events,
-        &allowed_caps,
-        match error_channel {
-            Some(channel) => channel.id.to_string(),
-            None => ctx.channel_id().to_string(),
-        },
-        ctx.author().id.to_string(),
-        ctx.author().id.to_string()
     )
+    .bind(guild_id.to_string())
+    .bind(&name)
+    .bind(&rec.events)
+    .bind(&rec.allowed_caps)
+    .bind(match error_channel {
+        Some(channel) => channel.id.to_string(),
+        None => ctx.channel_id().to_string(),
+    })
+    .bind(ctx.author().id.to_string())
+    .bind(ctx.author().id.to_string())
     .execute(&data.pool)
     .await
     .map_err(|e| format!("Failed to add template to guild: {:?}", e))?;

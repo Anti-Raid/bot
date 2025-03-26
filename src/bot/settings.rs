@@ -15,6 +15,7 @@ use crate::botlib::settings::SettingsData;
 use crate::Error;
 use serenity::all::CacheHttp;
 use silverpelt::lockdowns::LockdownData;
+use sqlx::Row;
 
 use super::{kittycat_permission_config_data, sandwich_config, template_dispatch_data};
 
@@ -120,7 +121,20 @@ impl SettingView<SettingsData> for GuildRolesExecutor {
         context: &SettingsData,
         _filters: indexmap::IndexMap<String, Value>,
     ) -> Result<Vec<indexmap::IndexMap<String, Value>>, Error> {
-        let rows = sqlx::query!("SELECT role_id, perms, index, display_name, created_at, created_by, last_updated_at, last_updated_by FROM guild_roles WHERE guild_id = $1", context.guild_id.to_string())
+        #[derive(sqlx::FromRow)]
+        pub struct GuildRolesRow {
+            role_id: String,
+            perms: Vec<String>,
+            index: i32,
+            display_name: Option<String>,
+            created_at: chrono::DateTime<chrono::Utc>,
+            created_by: String,
+            last_updated_at: chrono::DateTime<chrono::Utc>,
+            last_updated_by: String,
+        }
+
+        let rows: Vec<GuildRolesRow> = sqlx::query_as("SELECT role_id, perms, index, display_name, created_at, created_by, last_updated_at, last_updated_by FROM guild_roles WHERE guild_id = $1")
+        .bind(context.guild_id.to_string())
         .fetch_all(&context.data.pool)
         .await
         .map_err(|e| format!("Failed to fetch roles: {:?}", e))?;
@@ -160,40 +174,40 @@ impl SettingCreator<SettingsData> for GuildRolesExecutor {
             .base_verify_checks(ctx, &entry, OperationType::Create)
             .await?;
 
-        let count = sqlx::query!(
+        let count = sqlx::query(
             "SELECT COUNT(*) FROM guild_roles WHERE guild_id = $1 AND role_id = $2",
-            ctx.guild_id.to_string(),
-            res.role_id.to_string()
         )
+        .bind(ctx.guild_id.to_string())
+        .bind(res.role_id.to_string())
         .fetch_one(&ctx.data.pool)
         .await
         .map_err(|e| format!("Failed to check role counts from database: {:?}", e))?
-        .count
+        .try_get::<Option<i64>, _>(0)?
         .unwrap_or_default();
 
         if count > 0 {
             return Err("Role already exists".into());
         }
 
-        sqlx::query!(
+        sqlx::query(
             "INSERT INTO guild_roles (guild_id, role_id, perms, index, display_name, created_by, last_updated_by) VALUES ($1, $2, $3, $4, $5, $6, $7)",
-            ctx.guild_id.to_string(),
-            res.role_id.to_string(),
-            &res.perms,
-            res.index,
-            res.display_name,
-            ctx.author.to_string(),
-            ctx.author.to_string()
         )
+        .bind(ctx.guild_id.to_string())
+        .bind(res.role_id.to_string())
+        .bind(&res.perms)
+        .bind(res.index)
+        .bind(res.display_name)
+        .bind(ctx.author.to_string())
+        .bind(ctx.author.to_string())
         .execute(&ctx.data.pool)
         .await
         .map_err(|e| format!("Failed to insert role: {:?}", e))?;
 
-        sqlx::query!(
+        sqlx::query(
             "UPDATE guild_members SET needs_perm_rederive = true WHERE guild_id = $1 AND $2 = ANY(roles)",
-            ctx.guild_id.to_string(),
-            res.role_id.to_string()
         )
+        .bind(ctx.guild_id.to_string())
+        .bind(res.role_id.to_string())
         .execute(&ctx.data.pool)
         .await
         .map_err(|e| format!("Failed to update guild members cache: {:?}", e))?;
@@ -215,15 +229,15 @@ impl SettingUpdater<SettingsData> for GuildRolesExecutor {
             .base_verify_checks(ctx, &entry, OperationType::Update)
             .await?;
 
-        sqlx::query!(
+        sqlx::query(
             "UPDATE guild_roles SET perms = $1, index = $2, display_name = $3, last_updated_at = NOW(), last_updated_by = $4 WHERE guild_id = $5 AND role_id = $6",
-            &res.perms,
-            res.index,
-            res.display_name,
-            ctx.author.to_string(),
-            ctx.guild_id.to_string(),
-            res.role_id.to_string()
         )
+        .bind(&res.perms)
+        .bind(res.index)
+        .bind(res.display_name)
+        .bind(ctx.author.to_string())
+        .bind(ctx.guild_id.to_string())
+        .bind(res.role_id.to_string())
         .execute(&ctx.data.pool)
         .await
         .map_err(|e| format!("Failed to update role: {:?}", e))?;
@@ -241,7 +255,17 @@ impl SettingDeleter<SettingsData> for GuildRolesExecutor {
     ) -> Result<(), Error> {
         check_perms(ctx, "guild_roles.delete".into()).await?;
 
-        let Some(row) = sqlx::query!("SELECT role_id, perms, index, display_name FROM guild_roles WHERE guild_id = $1 AND role_id = $2", ctx.guild_id.to_string(), primary_key.to_string())
+        #[derive(sqlx::FromRow)]
+        struct GuildRolesRow {
+            role_id: String,
+            perms: Vec<String>,
+            index: i32,
+            display_name: Option<String>,
+        }
+
+        let Some(row): Option<GuildRolesRow> = sqlx::query_as("SELECT role_id, perms, index, display_name FROM guild_roles WHERE guild_id = $1 AND role_id = $2")
+        .bind(ctx.guild_id.to_string())
+        .bind(primary_key.to_string())
         .fetch_optional(&ctx.data.pool)
         .await
         .map_err(|e| format!("Error while fetching roles: {}", e))? else {
@@ -260,20 +284,20 @@ impl SettingDeleter<SettingsData> for GuildRolesExecutor {
             .base_verify_checks(ctx, &entry, OperationType::Delete)
             .await?;
 
-        sqlx::query!(
+        sqlx::query(
             "DELETE FROM guild_roles WHERE guild_id = $1 AND role_id = $2",
-            ctx.guild_id.to_string(),
-            res.role_id.to_string()
         )
+        .bind(ctx.guild_id.to_string())
+        .bind(res.role_id.to_string())
         .execute(&ctx.data.pool)
         .await
         .map_err(|e| format!("Failed to delete role: {:?}", e))?;
 
-        sqlx::query!(
+        sqlx::query(
             "UPDATE guild_members SET needs_perm_rederive = true WHERE guild_id = $1 AND $2 = ANY(roles)",
-            ctx.guild_id.to_string(),
-            res.role_id.to_string()
         )
+        .bind(ctx.guild_id.to_string())
+        .bind(res.role_id.to_string())
         .execute(&ctx.data.pool)
         .await
         .map_err(|e| format!("Failed to update guild members cache: {:?}", e))?;
@@ -322,13 +346,20 @@ impl GuildRolesExecutor {
                 int64 as i32
             }
             Value::Null => {
-                let highest_index_rec = sqlx::query!(
+                #[derive(sqlx::FromRow)]
+                struct HighestIndexRow {
+                    max: Option<i32>,
+                }
+
+                let max_index_row: HighestIndexRow = sqlx::query_as(
                     "SELECT MAX(index) FROM guild_roles WHERE guild_id = $1",
-                    ctx.guild_id.to_string()
                 )
+                .bind(ctx.guild_id.to_string())
                 .fetch_one(&ctx.data.pool)
                 .await
-                .map_err(|e| format!("Failed to get highest index: {:?}", e))?
+                .map_err(|e| format!("Failed to get highest index: {:?}", e))?;
+                
+                let highest_index_rec = max_index_row
                 .max
                 .unwrap_or(0);
 
@@ -408,10 +439,17 @@ impl GuildRolesExecutor {
         };
 
         let current_roles = {
-            let query = sqlx::query!(
+            #[derive(sqlx::FromRow)]
+            struct GuildRolesRow {
+                index: i32,
+                role_id: String,
+                perms: Vec<String>,
+            }
+
+            let query: Vec<GuildRolesRow> = sqlx::query_as(
                 "SELECT index, role_id, perms FROM guild_roles WHERE guild_id = $1",
-                ctx.guild_id.to_string()
             )
+            .bind(ctx.guild_id.to_string())
             .fetch_all(&ctx.data.pool)
             .await
             .map_err(|e| format!("Failed to get current role configuration: {:?}", e))?;
@@ -682,17 +720,21 @@ impl GuildMembersExecutor {
         };
 
         if op == OperationType::Update {
-            let current_public = sqlx::query!(
+            #[derive(sqlx::FromRow)]
+            struct GuildMembersRowPublic {
+                public: bool,
+            }
+
+            let current_public: GuildMembersRowPublic = sqlx::query_as(
                 "SELECT public FROM guild_members WHERE guild_id = $1 AND user_id = $2",
-                ctx.guild_id.to_string(),
-                user_id.to_string()
             )
+            .bind(ctx.guild_id.to_string())
+            .bind(user_id.to_string())
             .fetch_one(&ctx.data.pool)
             .await
-            .map_err(|e| format!("Failed to get current public status: {:?}", e))?
-            .public;
+            .map_err(|e| format!("Failed to get current public status: {:?}", e))?;
 
-            if *public != current_public && ctx.author != user_id {
+            if *public != current_public.public && ctx.author != user_id {
                 return Err("Only the user themselves can change their (own) public status".into());
             }
         }
@@ -851,7 +893,16 @@ impl SettingView<SettingsData> for GuildMembersExecutor {
         context: &SettingsData,
         _filters: indexmap::IndexMap<String, Value>,
     ) -> Result<Vec<indexmap::IndexMap<String, Value>>, Error> {
-        let rows = sqlx::query!("SELECT user_id, perm_overrides, public, created_at FROM guild_members WHERE guild_id = $1", context.guild_id.to_string())
+        #[derive(sqlx::FromRow)]
+        pub struct GuildMembersRow {
+            user_id: String,
+            perm_overrides: Vec<String>,
+            public: bool,
+            created_at: chrono::DateTime<chrono::Utc>,
+        }
+
+        let rows: Vec<GuildMembersRow> = sqlx::query_as("SELECT user_id, perm_overrides, public, created_at FROM guild_members WHERE guild_id = $1")
+        .bind(context.guild_id.to_string())
         .fetch_all(&context.data.pool)
         .await
         .map_err(|e| format!("Error while fetching guild roles: {}", e))?;
@@ -885,28 +936,29 @@ impl SettingCreator<SettingsData> for GuildMembersExecutor {
 
         let res = self.verify(ctx, &entry, OperationType::Create).await?;
 
-        let count = sqlx::query!(
+        let count = sqlx::query(
             "SELECT COUNT(*) FROM guild_members WHERE guild_id = $1 AND user_id = $2",
-            ctx.guild_id.to_string(),
-            res.user_id.to_string()
         )
+        .bind(ctx.guild_id.to_string())
+        .bind(res.user_id.to_string())
         .fetch_one(&ctx.data.pool)
         .await
         .map_err(|e| format!("Failed to check if role exists: {:?}", e))?
-        .count
+        .try_get::<Option<i64>, _>(0)
+        .map_err(|e| format!("Failed to get count: {:?}", e))?
         .unwrap_or_default();
 
         if count > 0 {
             return Err("Role already exists".into());
         }
 
-        sqlx::query!(
+        sqlx::query(
             "INSERT INTO guild_members (guild_id, user_id, perm_overrides, public) VALUES ($1, $2, $3, $4)",
-            ctx.guild_id.to_string(),
-            res.user_id.to_string(),
-            &res.perm_overrides.into_iter().map(|x| x.to_string()).collect::<Vec<String>>(),
-            res.public
         )
+        .bind(ctx.guild_id.to_string())
+        .bind(res.user_id.to_string())
+        .bind(res.perm_overrides.into_iter().map(|x| x.to_string()).collect::<Vec<String>>())
+        .bind(res.public)
         .execute(&ctx.data.pool)
         .await
         .map_err(|e| format!("Failed to insert role: {:?}", e))?;
@@ -926,13 +978,13 @@ impl SettingUpdater<SettingsData> for GuildMembersExecutor {
 
         let res = self.verify(ctx, &entry, OperationType::Update).await?;
 
-        sqlx::query!(
+        sqlx::query(
             "UPDATE guild_members SET perm_overrides = $1, public = $2 WHERE guild_id = $3 AND user_id = $4",
-            &res.perm_overrides.into_iter().map(|x| x.to_string()).collect::<Vec<String>>(),
-            res.public,
-            ctx.guild_id.to_string(),
-            res.user_id.to_string()
         )
+        .bind(res.perm_overrides.into_iter().map(|x| x.to_string()).collect::<Vec<String>>())
+        .bind(res.public)
+        .bind(ctx.guild_id.to_string())
+        .bind(res.user_id.to_string())
         .execute(&ctx.data.pool)
         .await
         .map_err(|e| format!("Failed to update role: {:?}", e))?;
@@ -950,7 +1002,16 @@ impl SettingDeleter<SettingsData> for GuildMembersExecutor {
     ) -> Result<(), Error> {
         check_perms(ctx, "guild_members.delete".into()).await?;
 
-        let Some(row) = sqlx::query!("SELECT user_id, perm_overrides, public FROM guild_members WHERE guild_id = $1 AND user_id = $2", ctx.guild_id.to_string(), primary_key.to_string())
+        #[derive(sqlx::FromRow)]
+        struct GuildMembersRow {
+            user_id: String,
+            perm_overrides: Vec<String>,
+            public: bool,
+        }
+
+        let Some(row): Option<GuildMembersRow> = sqlx::query_as("SELECT user_id, perm_overrides, public FROM guild_members WHERE guild_id = $1 AND user_id = $2")
+        .bind(ctx.guild_id.to_string())
+        .bind(primary_key.to_string())
         .fetch_optional(&ctx.data.pool)
         .await
         .map_err(|e| format!("Error while fetching roles: {}", e))? else {
@@ -966,11 +1027,11 @@ impl SettingDeleter<SettingsData> for GuildMembersExecutor {
 
         let res = self.verify(ctx, &entry, OperationType::Delete).await?;
 
-        sqlx::query!(
+        sqlx::query(
             "DELETE FROM guild_members WHERE guild_id = $1 AND user_id = $2",
-            ctx.guild_id.to_string(),
-            res.user_id.to_string()
         )
+        .bind(ctx.guild_id.to_string())
+        .bind(res.user_id.to_string())
         .execute(&ctx.data.pool)
         .await
         .map_err(|e| format!("Failed to delete role: {:?}", e))?;
@@ -1195,16 +1256,19 @@ impl GuildTemplateExecutor {
             let (shop_tname, shop_tversion) = silverpelt::templates::parse_shop_template(name)
                 .map_err(|e| format!("Failed to parse shop template: {:?}", e))?;
 
-            let shop_template = sqlx::query!(
+            let shop_template_count = sqlx::query(
                 "SELECT COUNT(*) FROM template_shop WHERE name = $1 AND version = $2",
-                shop_tname,
-                shop_tversion
             )
+            .bind(shop_tname)
+            .bind(shop_tversion)
             .fetch_one(&ctx.data.pool)
             .await
-            .map_err(|e| format!("Failed to get shop template: {:?}", e))?;
+            .map_err(|e| format!("Failed to get shop template: {:?}", e))?
+            .try_get::<Option<i64>, _>(0)
+            .map_err(|e| format!("Failed to get count: {:?}", e))?
+            .unwrap_or_default();
 
-            if shop_template.count.unwrap_or_default() == 0 {
+            if shop_template_count == 0 {
                 return Err("Shop template does not exist".into());
             }
         }
@@ -1234,7 +1298,23 @@ impl SettingView<SettingsData> for GuildTemplateExecutor {
 
         check_perms(context,"guild_templates.view".into()).await?;
 
-        let rows = sqlx::query!("SELECT name, content, language, allowed_caps, paused, events, error_channel, created_at, created_by, last_updated_at, last_updated_by FROM guild_templates WHERE guild_id = $1", context.guild_id.to_string())
+        #[derive(sqlx::FromRow)]
+        struct TemplateRow {
+            name: String,
+            content: String,
+            language: String,
+            allowed_caps: Vec<String>,
+            paused: bool,
+            events: Vec<String>,
+            error_channel: Option<String>,
+            created_at: chrono::DateTime<chrono::Utc>,
+            created_by: String,
+            last_updated_at: chrono::DateTime<chrono::Utc>,
+            last_updated_by: String,
+        }
+
+        let rows: Vec<TemplateRow> = sqlx::query_as("SELECT name, content, language, allowed_caps, paused, events, error_channel, created_at, created_by, last_updated_at, last_updated_by FROM guild_templates WHERE guild_id = $1")
+        .bind(context.guild_id.to_string())
         .fetch_all(&context.data.pool)
         .await
         .map_err(|e| format!("Error while fetching guild templates: {}", e))?;
@@ -1286,15 +1366,16 @@ impl SettingCreator<SettingsData> for GuildTemplateExecutor {
             return Err("Missing or invalid field: `name`".into());
         };
 
-        let count = sqlx::query!(
+        let count = sqlx::query(
             "SELECT COUNT(*) FROM guild_templates WHERE guild_id = $1 AND name = $2",
-            ctx.guild_id.to_string(),
-            name
         )
+        .bind(ctx.guild_id.to_string())
+        .bind(name)
         .fetch_one(&ctx.data.pool)
         .await
         .map_err(|e| format!("Failed to check if template exists: {:?}", e))?
-        .count
+        .try_get::<Option<i64>, _>(0)
+        .map_err(|e| format!("Failed to get count: {:?}", e))?
         .unwrap_or_default();
 
         if count > 0 {
@@ -1361,19 +1442,19 @@ impl SettingCreator<SettingsData> for GuildTemplateExecutor {
             _ => None,
         };
 
-        sqlx::query!(
+        sqlx::query(
             "INSERT INTO guild_templates (guild_id, name, language, content, events, paused, allowed_caps, error_channel, created_by, last_updated_by) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
-            ctx.guild_id.to_string(),
-            name,
-            language,
-            content,
-            &events,
-            paused,
-            &allowed_caps,
-            error_channel,
-            ctx.author.to_string(),
-            ctx.author.to_string()
         )
+        .bind(ctx.guild_id.to_string())
+        .bind(name)
+        .bind(language)
+        .bind(content)
+        .bind(&events)
+        .bind(paused)
+        .bind(&allowed_caps)
+        .bind(&error_channel)
+        .bind(ctx.author.to_string())
+        .bind(ctx.author.to_string())
         .execute(&ctx.data.pool)
         .await
         .map_err(|e| format!("Failed to insert template: {:?}", e))?;
@@ -1472,18 +1553,18 @@ impl SettingUpdater<SettingsData> for GuildTemplateExecutor {
             _ => None,
         };
 
-        sqlx::query!(
+        sqlx::query(
             "UPDATE guild_templates SET content = $1, events = $2, allowed_caps = $3, language = $4, paused = $9, last_updated_at = NOW(), last_updated_by = $5, error_channel = $6 WHERE guild_id = $7 AND name = $8",
-            content,
-            &events,
-            &allowed_caps,
-            language,
-            ctx.author.to_string(),
-            error_channel,
-            ctx.guild_id.to_string(),
-            name,
-            paused
         )
+        .bind(content)
+        .bind(&events)
+        .bind(&allowed_caps)
+        .bind(language)
+        .bind(ctx.author.to_string())
+        .bind(error_channel)
+        .bind(ctx.guild_id.to_string())
+        .bind(name)
+        .bind(paused)
         .execute(&ctx.data.pool)
         .await
         .map_err(|e| format!("Failed to update template: {:?}", e))?;
@@ -1507,11 +1588,11 @@ impl SettingDeleter<SettingsData> for GuildTemplateExecutor {
             return Err("Invalid primary key".into());
         };
 
-        let Some(row) = sqlx::query!(
+        let Some(row) = sqlx::query(
             "SELECT name FROM guild_templates WHERE guild_id = $1 AND name = $2",
-            ctx.guild_id.to_string(),
-            primary_key
         )
+        .bind(ctx.guild_id.to_string())
+        .bind(primary_key)
         .fetch_optional(&ctx.data.pool)
         .await
         .map_err(|e| format!("Error while fetching template: {}", e))?
@@ -1519,13 +1600,13 @@ impl SettingDeleter<SettingsData> for GuildTemplateExecutor {
             return Err("Template not found when trying to delete it!".into());
         };
 
-        let name = row.name;
+        let name = row.try_get::<String, _>(0).map_err(|e| format!("Failed to get name: {:?}", e))?;
 
-        sqlx::query!(
+        sqlx::query(
             "DELETE FROM guild_templates WHERE guild_id = $1 AND name = $2",
-            ctx.guild_id.to_string(),
-            name
         )
+        .bind(ctx.guild_id.to_string())
+        .bind(&name)
         .execute(&ctx.data.pool)
         .await
         .map_err(|e| format!("Failed to delete template: {:?}", e))?;
@@ -1589,7 +1670,16 @@ impl SettingView<SettingsData> for GuildTemplatesKVExecutor {
     ) -> Result<Vec<indexmap::IndexMap<String, Value>>, Error> {
         check_perms(context,"guild_templates_kv.view".into()).await?;
 
-        let rows = sqlx::query!("SELECT key, value, created_at, last_updated_at FROM guild_templates_kv WHERE guild_id = $1", context.guild_id.to_string())
+        #[derive(sqlx::FromRow)]
+        struct GuildTemplatesKVRow {
+            key: String,
+            value: Option<Value>,
+            created_at: chrono::DateTime<chrono::Utc>,
+            last_updated_at: chrono::DateTime<chrono::Utc>,
+        }
+
+        let rows: Vec<GuildTemplatesKVRow> = sqlx::query_as("SELECT key, value, created_at, last_updated_at FROM guild_templates_kv WHERE guild_id = $1")
+        .bind(context.guild_id.to_string())
         .fetch_all(&context.data.pool)
         .await
         .map_err(|e| format!("Error while fetching guild templates kv: {}", e))?;
@@ -1625,14 +1715,15 @@ impl SettingCreator<SettingsData> for GuildTemplatesKVExecutor {
             return Err("Missing or invalid field: `key`".into());
         };
 
-        let total_count: i64 = sqlx::query!(
+        let total_count: i64 = sqlx::query(
             "SELECT COUNT(*) FROM guild_templates_kv WHERE guild_id = $1",
-            ctx.guild_id.to_string()
         )
+        .bind(ctx.guild_id.to_string())
         .fetch_one(&ctx.data.pool)
         .await
         .map_err(|e| format!("Failed to check total kv count: {:?}", e))?
-        .count
+        .try_get::<Option<i64>, _>(0)
+        .map_err(|e| format!("Failed to get total kv count: {:?}", e))?
         .unwrap_or_default();
 
         if total_count
@@ -1641,15 +1732,16 @@ impl SettingCreator<SettingsData> for GuildTemplatesKVExecutor {
             return Err("Max key-value pairs reached".into());
         }
 
-        let count = sqlx::query!(
+        let count = sqlx::query(
             "SELECT COUNT(*) FROM guild_templates_kv WHERE guild_id = $1 AND key = $2",
-            ctx.guild_id.to_string(),
-            key
         )
+        .bind(ctx.guild_id.to_string())
+        .bind(key)
         .fetch_one(&ctx.data.pool)
         .await
         .map_err(|e| format!("Failed to check if kv exists: {:?}", e))?
-        .count
+        .try_get::<Option<i64>, _>(0)
+        .map_err(|e| format!("Failed to determine if key already exists: {:?}", e))?
         .unwrap_or_default();
 
         if count > 0 {
@@ -1660,12 +1752,12 @@ impl SettingCreator<SettingsData> for GuildTemplatesKVExecutor {
             return Err("Missing or invalid field: `value`".into());
         };
 
-        sqlx::query!(
+        sqlx::query(
             "INSERT INTO guild_templates_kv (guild_id, key, value, created_at, last_updated_at) VALUES ($1, $2, $3, NOW(), NOW())",
-            ctx.guild_id.to_string(),
-            key,
-            value
         )
+        .bind(ctx.guild_id.to_string())
+        .bind(key)
+        .bind(value)
         .execute(&ctx.data.pool)
         .await
         .map_err(|e| format!("Failed to insert kv: {:?}", e))?;
@@ -1701,12 +1793,12 @@ impl SettingUpdater<SettingsData> for GuildTemplatesKVExecutor {
             return Err("Missing or invalid field: `value`".into());
         };
 
-        sqlx::query!(
+        sqlx::query(
             "UPDATE guild_templates_kv SET value = $1, last_updated_at = NOW() WHERE guild_id = $2 AND key = $3",
-            value,
-            ctx.guild_id.to_string(),
-            key
         )
+        .bind(value)
+        .bind(ctx.guild_id.to_string())
+        .bind(key)
         .execute(&ctx.data.pool)
         .await
         .map_err(|e| format!("Failed to update kv: {:?}", e))?;
@@ -1734,26 +1826,27 @@ impl SettingDeleter<SettingsData> for GuildTemplatesKVExecutor {
     ) -> Result<(), Error> {
         check_perms(ctx, "guild_templates_kv.delete".into()).await?;
 
-        if sqlx::query!(
+        if sqlx::query(
             "SELECT COUNT(*) FROM guild_templates_kv WHERE guild_id = $1 AND key = $2",
-            ctx.guild_id.to_string(),
-            primary_key.to_string()
         )
+        .bind(ctx.guild_id.to_string())
+        .bind(primary_key.to_string())
         .fetch_one(&ctx.data.pool)
         .await
         .map_err(|e| format!("Error while fetching kv: {}", e))?
-        .count
+        .try_get::<Option<i64>, _>(0)
+        .map_err(|e| format!("Failed to get count: {:?}", e))?
         .unwrap_or_default()
             <= 0
         {
             return Err("Row requested to be deleted does not exist".into());
         };
 
-        sqlx::query!(
+        sqlx::query(
             "DELETE FROM guild_templates_kv WHERE guild_id = $1 AND key = $2",
-            ctx.guild_id.to_string(),
-            primary_key.to_string()
         )
+        .bind(ctx.guild_id.to_string())
+        .bind(primary_key.to_string())
         .execute(&ctx.data.pool)
         .await
         .map_err(|e| format!("Failed to delete kv: {:?}", e))?;
@@ -1960,7 +2053,26 @@ impl SettingView<SettingsData> for GuildTemplateShopExecutor {
     ) -> Result<Vec<indexmap::IndexMap<String, Value>>, Error> {
         check_perms(context,"guild_templates_shop.view".into()).await?;
 
-        let rows = sqlx::query!("SELECT id, name, friendly_name, language, allowed_caps, version, description, content, type, events, created_at, created_by, last_updated_at, last_updated_by FROM template_shop WHERE owner_guild = $1", context.guild_id.to_string())
+        #[derive(sqlx::FromRow)]
+        struct GuildTemplateShopRow {
+            id: uuid::Uuid,
+            name: String,
+            friendly_name: String,
+            language: String,
+            allowed_caps: Vec<String>,
+            version: String,
+            description: String,
+            content: String,
+            r#type: String,
+            events: Vec<String>,
+            created_at: chrono::DateTime<chrono::Utc>,
+            created_by: String,
+            last_updated_at: chrono::DateTime<chrono::Utc>,
+            last_updated_by: String,
+        }
+
+        let rows: Vec<GuildTemplateShopRow> = sqlx::query_as("SELECT id, name, friendly_name, language, allowed_caps, version, description, content, type, events, created_at, created_by, last_updated_at, last_updated_by FROM template_shop WHERE owner_guild = $1")
+        .bind(context.guild_id.to_string())
         .fetch_all(&context.data.pool)
         .await
         .map_err(|e| format!("Error while fetching shop templates: {}", e))?;
@@ -2032,15 +2144,16 @@ impl SettingCreator<SettingsData> for GuildTemplateShopExecutor {
                 return Err("Package name cannot contain '@'".into());
             }
 
-            let count = sqlx::query!(
+            let count = sqlx::query(
                 "SELECT COUNT(*) FROM template_shop WHERE owner_guild = $1 AND name = $2",
-                ctx.guild_id.to_string(),
-                namespace
             )
+            .bind(ctx.guild_id.to_string())
+            .bind(namespace)
             .fetch_one(&ctx.data.pool)
             .await
             .map_err(|e| format!("Failed to check if namespace exists: {:?}", e))?
-            .count
+            .try_get::<Option<i64>, _>(0)
+            .map_err(|e| format!("Failed to get count: {:?}", e))?
             .unwrap_or_default();
 
             if count <= 0 {
@@ -2066,18 +2179,19 @@ impl SettingCreator<SettingsData> for GuildTemplateShopExecutor {
             return Err("Version cannot be 'latest'".into());
         }
 
-        let count = sqlx::query!(
+        let count = sqlx::query(
             "SELECT COUNT(*) FROM template_shop WHERE owner_guild = $1 AND name = $2 AND version = $3",
-            ctx.guild_id.to_string(),
-            name,
-            version
         )
+        .bind(ctx.guild_id.to_string())
+        .bind(name)
+        .bind(version)
         .fetch_one(&ctx.data.pool)
         .await
         .map_err(|e| 
             format!("Failed to check if shop template exists: {:?}", e)
         )?
-        .count
+        .try_get::<Option<i64>, _>(0)
+        .map_err(|e| format!("Failed to get template shop count: {:?}", e))?
         .unwrap_or_default();
 
         if count > 0 {
@@ -2130,28 +2244,30 @@ impl SettingCreator<SettingsData> for GuildTemplateShopExecutor {
             },
         };
 
-        let id = sqlx::query!(
+        let id = sqlx::query(
             "INSERT INTO template_shop (name, friendly_name, language, version, description, content, type, events, owner_guild, created_by, last_updated_by, allowed_caps) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id",
-            name,
-            friendly_name,
-            language,
-            version,
-            description,
-            content,
-            r#type,
-            &events,
-            ctx.guild_id.to_string(),
-            ctx.author.to_string(),
-            ctx.author.to_string(),
-            &allowed_caps
         )
+        .bind(name)
+        .bind(friendly_name)
+        .bind(language)
+        .bind(version)
+        .bind(description)
+        .bind(content)
+        .bind(r#type)
+        .bind(&events)
+        .bind(ctx.guild_id.to_string())
+        .bind(ctx.author.to_string())
+        .bind(ctx.author.to_string())
+        .bind(&allowed_caps)
         .fetch_one(&ctx.data.pool)
         .await
         .map_err(|e| format!("Failed to insert shop template: {:?}", e))?;
 
+        let id: uuid::Uuid = id.try_get(0).map_err(|e| format!("Failed to get ID of created setting: {:?}", e))?;
+
         // Add returned ID to entry
         let mut entry = entry;
-        entry.insert("id".to_string(), Value::String(id.id.to_string()));
+        entry.insert("id".to_string(), Value::String(id.to_string()));
 
         Ok(entry)
     }
@@ -2172,15 +2288,16 @@ impl SettingUpdater<SettingsData> for GuildTemplateShopExecutor {
 
         let id: uuid::Uuid = id.parse().map_err(|e| format!("Failed to parse ID: {:?}", e))?;
 
-        let count = sqlx::query!(
+        let count = sqlx::query(
             "SELECT COUNT(*) FROM template_shop WHERE owner_guild = $1 AND id = $2",
-            ctx.guild_id.to_string(),
-            id
         )
+        .bind(ctx.guild_id.to_string())
+        .bind(id)
         .fetch_one(&ctx.data.pool)
         .await
         .map_err(|e| format!("Failed to check if shop template exists: {:?}", e))?
-        .count
+        .try_get::<i64, _>(0)
+        .map_err(|e| format!("Failed to get count: {:?}", e))
         .unwrap_or_default();
 
         if count <= 0 {
@@ -2199,15 +2316,15 @@ impl SettingUpdater<SettingsData> for GuildTemplateShopExecutor {
             return Err("Missing or invalid field: `type`".into());
         };
 
-        sqlx::query!(
+        sqlx::query(
             "UPDATE template_shop SET description = $1, type = $2, friendly_name = $3, last_updated_at = NOW(), last_updated_by = $4 WHERE owner_guild = $5 AND id = $6",
-            description,
-            r#type,
-            friendly_name,
-            ctx.author.to_string(),
-            ctx.guild_id.to_string(),
-            id
         )
+        .bind(description)
+        .bind(r#type)
+        .bind(friendly_name)
+        .bind(ctx.author.to_string())
+        .bind(ctx.guild_id.to_string())
+        .bind(id)
         .execute(&ctx.data.pool)
         .await
         .map_err(|e| format!("Failed to update shop template: {:?}", e))?;
@@ -2231,11 +2348,11 @@ impl SettingDeleter<SettingsData> for GuildTemplateShopExecutor {
 
         let primary_key = primary_key.parse::<uuid::Uuid>().map_err(|e| format!("Failed to parse ID: {:?}", e))?;
 
-        let Some(row) = sqlx::query!(
+        let Some(row) = sqlx::query(
             "SELECT id FROM template_shop WHERE owner_guild = $1 AND id = $2",
-            ctx.guild_id.to_string(),
-            primary_key
         )
+        .bind(ctx.guild_id.to_string())
+        .bind(primary_key)
         .fetch_optional(&ctx.data.pool)
         .await
         .map_err(|e| format!("Error while fetching shop template: {}", e))?
@@ -2243,13 +2360,13 @@ impl SettingDeleter<SettingsData> for GuildTemplateShopExecutor {
             return Err("Shop template not found when trying to delete it!".into());
         };
 
-        let id = row.id;
+        let id: uuid::Uuid = row.try_get(0).map_err(|e| format!("Failed to get ID: {:?}", e))?;
 
-        sqlx::query!(
+        sqlx::query(
             "DELETE FROM template_shop WHERE owner_guild = $1 AND id = $2",
-            ctx.guild_id.to_string(),
-            id
         )
+        .bind(ctx.guild_id.to_string())
+        .bind(id)
         .execute(&ctx.data.pool)
         .await
         .map_err(|e| format!("Failed to delete shop template: {:?}", e))?;
@@ -2361,7 +2478,21 @@ impl SettingView<SettingsData> for GuildTemplateShopPublicListExecutor {
         context: &SettingsData,
         _filters: indexmap::IndexMap<String, Value>,
     ) -> Result<Vec<indexmap::IndexMap<String, Value>>, Error> {
-        let rows = sqlx::query!("SELECT id, name, version, description, type, owner_guild, created_at, created_by, last_updated_at, last_updated_by FROM template_shop WHERE type = 'public'")
+        #[derive(sqlx::FromRow)]
+        struct GuildTemplateShopRow {
+            id: uuid::Uuid,
+            name: String,
+            version: String,
+            description: String,
+            r#type: String,
+            owner_guild: String,
+            created_at: chrono::DateTime<chrono::Utc>,
+            created_by: String,
+            last_updated_at: chrono::DateTime<chrono::Utc>,
+            last_updated_by: String,
+        }
+
+        let rows: Vec<GuildTemplateShopRow> = sqlx::query_as("SELECT id, name, version, description, type, owner_guild, created_at, created_by, last_updated_at, last_updated_by FROM template_shop WHERE type = 'public'")
         .fetch_all(&context.data.pool)
         .await
         .map_err(|e| format!("Error while fetching shop templates: {}", e))?;
@@ -2448,7 +2579,18 @@ impl SettingView<SettingsData> for LockdownSettingsExecutor {
     ) -> Result<Vec<indexmap::IndexMap<String, Value>>, Error> {
         check_perms(context,"lockdown_settings.view".into()).await?;
 
-        let rows = sqlx::query!("SELECT member_roles, require_correct_layout, created_at, created_by, last_updated_at, last_updated_by FROM lockdown__guilds WHERE guild_id = $1", context.guild_id.to_string())
+        #[derive(sqlx::FromRow)]
+        struct LockdownRow {
+            member_roles: Vec<String>,
+            require_correct_layout: bool,
+            created_at: chrono::DateTime<chrono::Utc>,
+            created_by: String,
+            last_updated_at: chrono::DateTime<chrono::Utc>,
+            last_updated_by: String,
+        }
+
+        let rows: Vec<LockdownRow> = sqlx::query_as("SELECT member_roles, require_correct_layout, created_at, created_by, last_updated_at, last_updated_by FROM lockdown__guilds WHERE guild_id = $1")
+            .bind(context.guild_id.to_string())
             .fetch_all(&context.data.pool)
             .await
             .map_err(|e| format!("Error while fetching lockdowns: {}", e))?;
@@ -2495,14 +2637,14 @@ impl SettingCreator<SettingsData> for LockdownSettingsExecutor {
             return Err("Missing or invalid field: `require_correct_layout`".into());
         };
 
-        sqlx::query!(
+        sqlx::query(
             "INSERT INTO lockdown__guilds (guild_id, member_roles, require_correct_layout, created_at, created_by, last_updated_at, last_updated_by) VALUES ($1, $2, $3, NOW(), $4, NOW(), $5)",
-            context.guild_id.to_string(),
-            &member_roles,
-            require_correct_layout,
-            context.author.to_string(),
-            context.author.to_string(),
         )
+        .bind(context.guild_id.to_string())
+        .bind(&member_roles)
+        .bind(require_correct_layout)
+        .bind(context.author.to_string())
+        .bind(context.author.to_string())
         .execute(&context.data.pool)
         .await
         .map_err(|e| format!("Error while creating lockdown settings: {}", e))?;
@@ -2533,25 +2675,28 @@ impl SettingUpdater<SettingsData> for LockdownSettingsExecutor {
             return Err("Missing or invalid field: `require_correct_layout`".into());
         };
 
-        let count = sqlx::query!(
+        let count = sqlx::query(
             "SELECT COUNT(*) FROM lockdown__guilds WHERE guild_id = $1",
-            context.guild_id.to_string(),
         )
+        .bind(context.guild_id.to_string())
         .fetch_one(&context.data.pool)
         .await
-        .map_err(|e| format!("Error while updating lockdown settings: {}", e))?;
+        .map_err(|e| format!("Error while updating lockdown settings: {}", e))?
+        .try_get::<Option<i64>, _>(0)
+        .map_err(|e| format!("Error while updating lockdown settings: {}", e))?
+        .unwrap_or(0);
 
-        if count.count.unwrap_or(0) == 0 {
+        if count == 0 {
             return Err("Lockdown settings not found".into());
         }
 
-        sqlx::query!(
+        sqlx::query(
             "UPDATE lockdown__guilds SET member_roles = $2, require_correct_layout = $3, last_updated_at = NOW(), last_updated_by = $4 WHERE guild_id = $1",
-            context.guild_id.to_string(),
-            &member_roles,
-            require_correct_layout,
-            context.author.to_string(),
         )
+        .bind(context.guild_id.to_string())
+        .bind(&member_roles)
+        .bind(require_correct_layout)
+        .bind(context.author.to_string())
         .execute(&context.data.pool)
         .await
         .map_err(|e| format!("Error while creating lockdown settings: {}", e))?;
@@ -2569,7 +2714,8 @@ impl SettingDeleter<SettingsData> for LockdownSettingsExecutor {
     ) -> Result<(), Error> {
         check_perms(context,"lockdown_settings.delete".into()).await?;
 
-        sqlx::query!("DELETE FROM lockdown__guilds WHERE guild_id = $1", context.guild_id.to_string())
+        sqlx::query("DELETE FROM lockdown__guilds WHERE guild_id = $1")
+            .bind(context.guild_id.to_string())
             .execute(&context.data.pool)
             .await
             .map_err(|e| format!("Error while deleting lockdown settings: {}", e))?;
@@ -2660,9 +2806,19 @@ impl SettingView<SettingsData> for LockdownExecutor {
         context: &SettingsData,
         _filters: indexmap::IndexMap<String, Value>,
     ) -> Result<Vec<indexmap::IndexMap<String, Value>>, Error> {
-        check_perms(context,"lockdowns.view".into()).await?;
+        check_perms(context, "lockdowns.view".into()).await?;
 
-        let rows = sqlx::query!("SELECT id, data, type, reason, created_at FROM lockdown__guild_lockdowns WHERE guild_id = $1", context.guild_id.to_string())
+        #[derive(sqlx::FromRow)]
+        struct LockdownRow {
+            id: uuid::Uuid,
+            data: serde_json::Value,
+            r#type: String,
+            reason: String,
+            created_at: chrono::DateTime<chrono::Utc>,
+        }
+
+        let rows: Vec<LockdownRow> = sqlx::query_as("SELECT id, data, type, reason, created_at FROM lockdown__guild_lockdowns WHERE guild_id = $1")
+            .bind(context.guild_id.to_string())
             .fetch_all(&context.data.pool)
             .await
             .map_err(|e| format!("Error while fetching lockdowns: {}", e))?;

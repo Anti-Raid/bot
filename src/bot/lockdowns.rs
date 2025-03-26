@@ -1,4 +1,5 @@
 use silverpelt::lockdowns::LockdownData;
+use sqlx::Row;
 
 use crate::{bot::sandwich_config, Context, Error};
 
@@ -12,11 +13,14 @@ pub async fn lockdown_autocomplete<'a>(
         return serenity::builder::CreateAutocompleteResponse::new();
     };
 
-    match sqlx::query!(
+    match sqlx::query(
         "SELECT id, type FROM lockdown__guild_lockdowns WHERE guild_id = $1 AND type ILIKE $2",
-        guild_id.to_string(),
-        format!("%{}%", partial.replace('%', "\\%").replace('_', "\\_")),
     )
+    .bind(guild_id.to_string())
+    .bind(format!(
+        "%{}%",
+        partial.replace('%', "\\%").replace('_', "\\_")
+    ))
     .fetch_all(&data.pool)
     .await
     {
@@ -24,10 +28,16 @@ pub async fn lockdown_autocomplete<'a>(
             let mut choices = serenity::all::CreateAutocompleteResponse::new();
 
             for lockdown in lockdowns {
-                choices = choices.add_choice(serenity::all::AutocompleteChoice::new(
-                    lockdown.r#type,
-                    lockdown.id.to_string(),
-                ));
+                let Ok(typ) = lockdown.try_get::<String, _>("type") else {
+                    continue;
+                };
+
+                let Ok(id) = lockdown.try_get::<uuid::Uuid, _>("id") else {
+                    continue;
+                };
+
+                choices =
+                    choices.add_choice(serenity::all::AutocompleteChoice::new(typ, id.to_string()));
             }
 
             choices

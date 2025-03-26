@@ -154,12 +154,16 @@ pub async fn command_check(ctx: Context<'_>) -> Result<bool, Error> {
 
     let data = ctx.data();
 
-    let guild_onboarding_status = sqlx::query!(
-        "SELECT bot_onboarding_seen_ver FROM guilds WHERE id = $1",
-        guild_id.to_string()
-    )
-    .fetch_optional(&data.pool)
-    .await?;
+    #[derive(sqlx::FromRow)]
+    struct GOSRecord {
+        bot_onboarding_seen_ver: i32,
+    }
+
+    let guild_onboarding_status: Option<GOSRecord> =
+        sqlx::query_as("SELECT bot_onboarding_seen_ver FROM guilds WHERE id = $1")
+            .bind(guild_id.to_string())
+            .fetch_optional(&data.pool)
+            .await?;
 
     if let Some(guild_onboarding_status) = guild_onboarding_status {
         if guild_onboarding_status.bot_onboarding_seen_ver != BOT_ONBOARDING_VERSION {
@@ -167,46 +171,43 @@ pub async fn command_check(ctx: Context<'_>) -> Result<bool, Error> {
             ctx.send(setup_message()).await?;
 
             // Set onboarding status to true
-            sqlx::query!(
-                "UPDATE guilds SET bot_onboarding_seen_ver = $1 WHERE id = $2",
-                BOT_ONBOARDING_VERSION,
-                guild_id.to_string()
-            )
-            .execute(&data.pool)
-            .await?;
+            sqlx::query("UPDATE guilds SET bot_onboarding_seen_ver = $1 WHERE id = $2")
+                .bind(BOT_ONBOARDING_VERSION)
+                .bind(guild_id.to_string())
+                .execute(&data.pool)
+                .await?;
 
             return Ok(false);
         }
     } else {
         // Guild not found, create it
-        sqlx::query!(
-            "INSERT INTO guilds (id, bot_onboarding_seen_ver) VALUES ($1, $2)",
-            guild_id.to_string(),
-            BOT_ONBOARDING_VERSION
-        )
-        .execute(&data.pool)
-        .await?;
+        sqlx::query("INSERT INTO guilds (id, bot_onboarding_seen_ver) VALUES ($1, $2)")
+            .bind(guild_id.to_string())
+            .bind(BOT_ONBOARDING_VERSION)
+            .execute(&data.pool)
+            .await?;
 
         // Send setup message instead
         ctx.send(setup_message()).await?;
         return Ok(false);
     }
 
-    let user = sqlx::query!(
-        "SELECT COUNT(*) FROM users WHERE user_id = $1",
-        guild_id.to_string()
-    )
-    .fetch_one(&data.pool)
-    .await?;
+    #[derive(sqlx::FromRow)]
+    struct UserCountRecord {
+        count: Option<i64>,
+    }
+
+    let user: UserCountRecord = sqlx::query_as("SELECT COUNT(*) FROM users WHERE user_id = $1")
+        .bind(guild_id.to_string())
+        .fetch_one(&data.pool)
+        .await?;
 
     if user.count.unwrap_or_default() == 0 {
         // User not found, create it
-        sqlx::query!(
-            "INSERT INTO users (user_id) VALUES ($1)",
-            guild_id.to_string()
-        )
-        .execute(&data.pool)
-        .await?;
+        sqlx::query("INSERT INTO users (user_id) VALUES ($1)")
+            .bind(guild_id.to_string())
+            .execute(&data.pool)
+            .await?;
     }
 
     Ok(true)

@@ -216,10 +216,10 @@ pub async fn start() {
                 );
 
                 // Record command execution counter
-                let _ = sqlx::query!(
+                let _ = sqlx::query(
                     "INSERT INTO cmd_usage_stats (command_name, uses) VALUES ($1, 1) ON CONFLICT (command_name) DO UPDATE SET uses = cmd_usage_stats.uses + 1",
-                    ctx.command().qualified_name.to_string()
                 )
+                .bind(ctx.command().qualified_name.to_string())
                 .execute(&ctx.data().pool)
                 .await;
             })

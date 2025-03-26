@@ -305,7 +305,7 @@ async fn prune(
     // Fire ModerationStart event
     let author_user_id = author.user.id;
     let target_user_id = user.as_ref().map(|u| u.id);
-    let correlation_id = sqlx::types::uuid::Uuid::new_v4();
+    let correlation_id = uuid::Uuid::new_v4();
     let results = AntiraidEvent::ModerationStart(ModerationStartEventData {
         correlation_id,
         reason: Some(reason.clone()),
@@ -507,7 +507,7 @@ async fn kick(
 
     let kick_log_msg = to_log_format(&author.user, &member.user, &reason);
 
-    let correlation_id = sqlx::types::Uuid::new_v4();
+    let correlation_id = uuid::Uuid::new_v4();
     let author_user_id = author.user.id;
     let target_user_id = member.user.id;
     let target_mention = member.mention();
@@ -676,7 +676,7 @@ async fn ban(
 
     let ban_log_msg = to_log_format(&author.user, &user, &reason);
 
-    let correlation_id = sqlx::types::Uuid::new_v4();
+    let correlation_id = uuid::Uuid::new_v4();
     let author_user_id = author.user.id;
     let target_user_id = user.id;
     let target_mention = user.mention();
@@ -850,7 +850,7 @@ async fn tempban(
 
     let tempban_log_msg = to_log_format(&author.user, &user, &reason);
 
-    let correlation_id = sqlx::types::Uuid::new_v4();
+    let correlation_id = uuid::Uuid::new_v4();
     let author_user_id = author.user.id;
     let target_user_id = user.id;
     let target_mention = user.mention();
@@ -1021,7 +1021,7 @@ async fn unban(
 
     let unban_log_msg = to_log_format(&author.user, &user, &reason);
 
-    let correlation_id = sqlx::types::Uuid::new_v4();
+    let correlation_id = uuid::Uuid::new_v4();
     let author_user_id = author.user.id;
     let target_user_id = user.id;
     let target_mention = user.mention();
@@ -1173,7 +1173,7 @@ async fn timeout(
 
     let timeout_log_msg = to_log_format(&author.user, &member.user, &reason);
 
-    let correlation_id = sqlx::types::Uuid::new_v4();
+    let correlation_id = uuid::Uuid::new_v4();
     let author_user_id = author.user.id;
     let target_user_id = member.user.id;
     let target_mention = member.user.mention();
