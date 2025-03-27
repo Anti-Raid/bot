@@ -211,6 +211,7 @@ pub async fn load(
     )
     .bind(guild_id.to_string())
     .bind(&name)
+    .bind(serde_json::Value::Null)
     .bind(&rec.events)
     .bind(&rec.allowed_caps)
     .bind(match error_channel {

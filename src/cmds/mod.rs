@@ -1,4 +1,5 @@
 mod bot;
+mod migrations;
 mod poise_register;
 mod serenity_test;
 
@@ -84,8 +85,11 @@ pub async fn cmd_loader() {
         Some("bot") => {
             bot::start().await;
         }
+        Some("migrate.db") => {
+            migrations::start().await;
+        }
         _ => {
-            println!("No/unknown command specified.\n\ngenassets: [generate build assets]\ntest [test bot with some sanity checks]\nnserenity.test: [test serenity library]\npoise.register: [register poise commands]\nbot: [start bot]");
+            println!("No/unknown command specified.\n\ngenassets: [generate build assets]\ntest [test bot with some sanity checks]\nnserenity.test: [test serenity library]\npoise.register: [register poise commands]\nbot: [start bot]\nmigrate.db: [run db migrations]");
             std::process::exit(1);
         }
     }

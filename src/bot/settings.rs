@@ -1083,11 +1083,9 @@ pub static GUILD_TEMPLATES: LazyLock<Setting<SettingsData>> = LazyLock::new(|| {
                 id: "content".to_string(),
                 name: "Content".to_string(),
                 description: "The content of the script".to_string(),
-                column_type: ColumnType::new_scalar(InnerColumnType::String {
+                column_type: ColumnType::new_scalar(InnerColumnType::Json {
                     kind: "template".to_string(),
-                    min_length: None,
-                    max_length: None,
-                    allowed_values: vec![],
+                    max_bytes: Some(1024 * 1024 * 5), // 5MB
                 }),
                 nullable: false,
                 suggestions: ColumnSuggestion::None {},
@@ -1302,7 +1300,7 @@ impl SettingView<SettingsData> for GuildTemplateExecutor {
         #[derive(sqlx::FromRow)]
         struct TemplateRow {
             name: String,
-            content: String,
+            content: serde_json::Value,
             language: String,
             allowed_caps: Vec<String>,
             paused: bool,
@@ -1326,7 +1324,7 @@ impl SettingView<SettingsData> for GuildTemplateExecutor {
             let map = indexmap::indexmap! {
                 "guild_id".to_string() => Value::String(context.scope.guild_id()?.to_string()),
                 "name".to_string() => Value::String(row.name),
-                "content".to_string() => Value::String(row.content),
+                "content".to_string() => row.content,
                 "language".to_string() => Value::String(row.language),
                 "allowed_caps".to_string() => {
                     Value::Array(row.allowed_caps.iter().map(|x| Value::String(x.to_string())).collect())
@@ -1389,9 +1387,16 @@ impl SettingCreator<SettingsData> for GuildTemplateExecutor {
             return Err("Missing or invalid field: `language`".into());
         };
 
-        let Some(Value::String(content)) = entry.get("content") else {
+        let Some(content) = entry.get("content") else {
             return Err("Missing or invalid field: `content`".into());
         };
+
+        // Try to parse content as a hashmap<String, String>
+        let string_form = serde_json::to_string(&content)
+            .map_err(|e| format!("Failed to convert content to string: {:?}", e))?;
+
+        let _: indexmap::IndexMap<String, Value> = serde_json::from_str(&string_form)   
+            .map_err(|e| format!("Failed to parse content: {:?}", e))?;     
 
         let Some(Value::Bool(paused)) = entry.get("paused") else {
             return Err("Missing or invalid field: `paused`".into());
@@ -1466,7 +1471,7 @@ impl SettingCreator<SettingsData> for GuildTemplateExecutor {
             "guild_id".to_string() => Value::String(ctx.scope.guild_id()?.to_string()),
             "name".to_string() => Value::String(name.to_string()),
             "language".to_string() => Value::String(language.to_string()),
-            "content".to_string() => Value::String(content.to_string()),
+            "content".to_string() => content.clone(),
             "events".to_string() => Value::Array(events.iter().map(|x| Value::String(x.to_string())).collect()),
             "paused".to_string() => Value::Bool(*paused),
             "allowed_caps".to_string() => Value::Array(allowed_caps.iter().map(|x| Value::String(x.to_string())).collect()),
@@ -1499,9 +1504,16 @@ impl SettingUpdater<SettingsData> for GuildTemplateExecutor {
             return Err("Missing or invalid field: `language`".into());
         };
 
-        let Some(Value::String(content)) = entry.get("content") else {
+        let Some(content) = entry.get("content") else {
             return Err("Missing or invalid field: `content`".into());
         };
+
+        // Try to parse content as a hashmap<String, String>
+        let string_form = serde_json::to_string(&content)
+            .map_err(|e| format!("Failed to convert content to string: {:?}", e))?;
+
+        let _: indexmap::IndexMap<String, Value> = serde_json::from_str(&string_form)   
+            .map_err(|e| format!("Failed to parse content: {:?}", e))?;     
 
         let events = match entry.get("events") {
             Some(Value::Array(events)) => 
@@ -1645,6 +1657,7 @@ pub static GUILD_TEMPLATES_KV: LazyLock<Setting<SettingsData>> = LazyLock::new(|
             name: "Value".to_string(),
             description: "The value of the record".to_string(),
             column_type: ColumnType::new_scalar(InnerColumnType::Json {
+                kind: "kv_value".to_string(),
                 max_bytes: Some(silverpelt::templates::LuaKVConstraints::default().max_value_bytes),
             }),
             nullable: true,
@@ -1967,11 +1980,9 @@ pub static GUILD_TEMPLATE_SHOP: LazyLock<Setting<SettingsData>> = LazyLock::new(
                 id: "content".to_string(),
                 name: "Content".to_string(),
                 description: "The content of the script. Cannot be updated once set (use a new version for that)".to_string(),
-                column_type: ColumnType::new_scalar(InnerColumnType::String {
+                column_type: ColumnType::new_scalar(InnerColumnType::Json {
                     kind: "template".to_string(),
-                    min_length: None,
-                    max_length: None,
-                    allowed_values: vec![],
+                    max_bytes: Some(1024 * 1024 * 5), // 5MB
                 }),
                 nullable: false,
                 suggestions: ColumnSuggestion::None {},
@@ -2063,7 +2074,7 @@ impl SettingView<SettingsData> for GuildTemplateShopExecutor {
             allowed_caps: Vec<String>,
             version: String,
             description: String,
-            content: String,
+            content: serde_json::Value,
             r#type: String,
             events: Vec<String>,
             created_at: chrono::DateTime<chrono::Utc>,
@@ -2092,7 +2103,7 @@ impl SettingView<SettingsData> for GuildTemplateShopExecutor {
                 "version".to_string() => Value::String(row.version),
                 "description".to_string() => Value::String(row.description),
                 "type".to_string() => Value::String(row.r#type),
-                "content".to_string() => Value::String(row.content),
+                "content".to_string() => row.content,
                 "events".to_string() => {
                     Value::Array(row.events.iter().map(|x| Value::String(x.to_string())).collect())
                 },
@@ -2203,9 +2214,16 @@ impl SettingCreator<SettingsData> for GuildTemplateShopExecutor {
             return Err("Missing or invalid field: `description`".into());
         };
 
-        let Some(Value::String(content)) = entry.get("content") else {
+        let Some(content) = entry.get("content") else {
             return Err("Missing or invalid field: `content`".into());
         };
+
+        // Try to parse content as a hashmap<String, String>
+        let string_form = serde_json::to_string(&content)
+            .map_err(|e| format!("Failed to convert content to string: {:?}", e))?;
+
+        let _: indexmap::IndexMap<String, Value> = serde_json::from_str(&string_form)   
+            .map_err(|e| format!("Failed to parse content: {:?}", e))?;     
 
         let Some(Value::String(r#type)) = entry.get("type") else {
             return Err("Missing or invalid field: `type`".into());
@@ -2771,7 +2789,7 @@ pub static LOCKDOWNS: LazyLock<Setting<SettingsData>> = LazyLock::new(|| Setting
             id: "data".to_string(),
             name: "Data".to_string(),
             description: "The data stored of the lockdown.".to_string(),
-            column_type: ColumnType::new_scalar(InnerColumnType::Json { max_bytes: None }),
+            column_type: ColumnType::new_scalar(InnerColumnType::Json { max_bytes: None, kind: "normal".to_string() }),
             nullable: false,
             suggestions: ColumnSuggestion::None {},
             ignored_for: vec![OperationType::Create, OperationType::Update],
