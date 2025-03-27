@@ -2474,6 +2474,7 @@ pub struct GuildTemplateShopPublicListExecutor;
 
 #[async_trait::async_trait]
 impl SettingView<SettingsData> for GuildTemplateShopPublicListExecutor {
+    // Note: can be used anonymously
     async fn view<'a>(
         &self,
         context: &SettingsData,
