@@ -11,7 +11,7 @@ use std::sync::Arc;
 use ar_settings::{self, types::OperationType};
 use types::{CanonicalSettingsResult, SettingsOperationRequest};
 
-use crate::bot::sandwich_config;
+use crate::{bot::sandwich_config, botlib::settings::RequestScope};
 
 type Response<T> = Result<Json<T>, (StatusCode, String)>;
 
@@ -54,6 +54,11 @@ pub fn create_bot_rpc_server(
         .route(
             "/settings-operation/:guild_id/:user_id",
             post(settings_operation),
+        )
+        // Executes an operation on a setting [SettingsOperationAnonymous]
+        .route(
+            "/settings-operation-anonymous",
+            post(settings_operation_anonymous),
         );
     let router: Router<()> = router.with_state(AppData::new(data, ctx));
     router.into_make_service()
@@ -288,7 +293,10 @@ pub(crate) async fn settings_operation(
         OperationType::View => {
             match ar_settings::cfg::settings_view(
                 &setting,
-                &crate::botlib::settings::settings_data(serenity_context, guild_id, user_id),
+                &crate::botlib::settings::settings_data(
+                    serenity_context,
+                    RequestScope::Guild((guild_id, user_id)),
+                ),
                 req.fields,
             )
             .await
@@ -302,7 +310,10 @@ pub(crate) async fn settings_operation(
         OperationType::Create => {
             match ar_settings::cfg::settings_create(
                 &setting,
-                &crate::botlib::settings::settings_data(serenity_context, guild_id, user_id),
+                &crate::botlib::settings::settings_data(
+                    serenity_context,
+                    RequestScope::Guild((guild_id, user_id)),
+                ),
                 req.fields,
             )
             .await
@@ -316,7 +327,10 @@ pub(crate) async fn settings_operation(
         OperationType::Update => {
             match ar_settings::cfg::settings_update(
                 &setting,
-                &crate::botlib::settings::settings_data(serenity_context, guild_id, user_id),
+                &crate::botlib::settings::settings_data(
+                    serenity_context,
+                    RequestScope::Guild((guild_id, user_id)),
+                ),
                 req.fields,
             )
             .await
@@ -336,7 +350,105 @@ pub(crate) async fn settings_operation(
 
             match ar_settings::cfg::settings_delete(
                 &setting,
-                &crate::botlib::settings::settings_data(serenity_context, guild_id, user_id),
+                &crate::botlib::settings::settings_data(
+                    serenity_context,
+                    RequestScope::Guild((guild_id, user_id)),
+                ),
+                pkey.clone(),
+            )
+            .await
+            {
+                Ok(_res) => Json(CanonicalSettingsResult::Ok { fields: vec![] }),
+                Err(e) => Json(CanonicalSettingsResult::Err {
+                    error: e.to_string(),
+                }),
+            }
+        }
+    }
+}
+
+/// Executes an operation on a setting [SettingsOperationAnonymous]
+pub(crate) async fn settings_operation_anonymous(
+    State(AppData {
+        serenity_context, ..
+    }): State<AppData>,
+    Json(req): Json<SettingsOperationRequest>,
+) -> Json<types::CanonicalSettingsResult> {
+    let op: OperationType = req.op;
+
+    // Find the setting
+    let mut setting = None;
+
+    for setting_obj in crate::bot::config_options() {
+        if setting_obj.id == req.setting {
+            setting = Some(setting_obj);
+            break;
+        }
+    }
+
+    //if let Some(page_setting) = templating::cache::get_setting(guild_id, &req.setting).await {
+    //    setting = Some(page_setting);
+    //};
+
+    let Some(setting) = setting else {
+        return Json(CanonicalSettingsResult::Err {
+            error: "Setting not found".to_string(),
+        });
+    };
+
+    match op {
+        OperationType::View => {
+            match ar_settings::cfg::settings_view(
+                &setting,
+                &crate::botlib::settings::settings_data(serenity_context, RequestScope::Anonymous),
+                req.fields,
+            )
+            .await
+            {
+                Ok(res) => Json(CanonicalSettingsResult::Ok { fields: res }),
+                Err(e) => Json(CanonicalSettingsResult::Err {
+                    error: e.to_string(),
+                }),
+            }
+        }
+        OperationType::Create => {
+            match ar_settings::cfg::settings_create(
+                &setting,
+                &crate::botlib::settings::settings_data(serenity_context, RequestScope::Anonymous),
+                req.fields,
+            )
+            .await
+            {
+                Ok(res) => Json(CanonicalSettingsResult::Ok { fields: vec![res] }),
+                Err(e) => Json(CanonicalSettingsResult::Err {
+                    error: e.to_string(),
+                }),
+            }
+        }
+        OperationType::Update => {
+            match ar_settings::cfg::settings_update(
+                &setting,
+                &crate::botlib::settings::settings_data(serenity_context, RequestScope::Anonymous),
+                req.fields,
+            )
+            .await
+            {
+                Ok(res) => Json(CanonicalSettingsResult::Ok { fields: vec![res] }),
+                Err(e) => Json(CanonicalSettingsResult::Err {
+                    error: e.to_string(),
+                }),
+            }
+        }
+        OperationType::Delete => {
+            let Some(pkey) = req.fields.get(&setting.primary_key) else {
+                return Json(CanonicalSettingsResult::Err {
+                    error: format!("Missing or invalid field: `{}`", setting.primary_key),
+                });
+            };
+
+            match ar_settings::cfg::settings_delete(
+                &setting,
+                &crate::botlib::settings::settings_data(serenity_context, RequestScope::Anonymous),
                 pkey.clone(),
             )
             .await

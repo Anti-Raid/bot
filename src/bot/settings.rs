@@ -23,9 +23,10 @@ async fn check_perms(
     ctx: &SettingsData,
     perm: kittycat::perms::Permission,
 ) -> Result<(), Error> {
+    let guild_id = ctx.scope.guild_id()?;
     crate::botlib::permission_checks::check_permissions(
-        ctx.guild_id,
-        ctx.author,
+        guild_id,
+        ctx.scope.user_id()?,
         &ctx.data.pool,
         &ctx.serenity_context,
         &ctx.data.reqwest,
@@ -134,7 +135,7 @@ impl SettingView<SettingsData> for GuildRolesExecutor {
         }
 
         let rows: Vec<GuildRolesRow> = sqlx::query_as("SELECT role_id, perms, index, display_name, created_at, created_by, last_updated_at, last_updated_by FROM guild_roles WHERE guild_id = $1")
-        .bind(context.guild_id.to_string())
+        .bind(context.scope.guild_id()?.to_string())
         .fetch_all(&context.data.pool)
         .await
         .map_err(|e| format!("Failed to fetch roles: {:?}", e))?;
@@ -143,7 +144,7 @@ impl SettingView<SettingsData> for GuildRolesExecutor {
 
         for row in rows {
             let map = indexmap::indexmap! {
-                "guild_id".to_string() => Value::String(context.guild_id.to_string()),
+                "guild_id".to_string() => Value::String(context.scope.guild_id()?.to_string()),
                 "role_id".to_string() => Value::String(row.role_id),
                 "perms".to_string() => Value::Array(row.perms.iter().map(|x| Value::String(x.to_string())).collect()),
                 "index".to_string() => Value::Number(row.index.into()),
@@ -177,7 +178,7 @@ impl SettingCreator<SettingsData> for GuildRolesExecutor {
         let count = sqlx::query(
             "SELECT COUNT(*) FROM guild_roles WHERE guild_id = $1 AND role_id = $2",
         )
-        .bind(ctx.guild_id.to_string())
+        .bind(ctx.scope.guild_id()?.to_string())
         .bind(res.role_id.to_string())
         .fetch_one(&ctx.data.pool)
         .await
@@ -192,13 +193,13 @@ impl SettingCreator<SettingsData> for GuildRolesExecutor {
         sqlx::query(
             "INSERT INTO guild_roles (guild_id, role_id, perms, index, display_name, created_by, last_updated_by) VALUES ($1, $2, $3, $4, $5, $6, $7)",
         )
-        .bind(ctx.guild_id.to_string())
+        .bind(ctx.scope.guild_id()?.to_string())
         .bind(res.role_id.to_string())
         .bind(&res.perms)
         .bind(res.index)
         .bind(res.display_name)
-        .bind(ctx.author.to_string())
-        .bind(ctx.author.to_string())
+        .bind(ctx.scope.user_id()?.to_string())
+        .bind(ctx.scope.user_id()?.to_string())
         .execute(&ctx.data.pool)
         .await
         .map_err(|e| format!("Failed to insert role: {:?}", e))?;
@@ -206,7 +207,7 @@ impl SettingCreator<SettingsData> for GuildRolesExecutor {
         sqlx::query(
             "UPDATE guild_members SET needs_perm_rederive = true WHERE guild_id = $1 AND $2 = ANY(roles)",
         )
-        .bind(ctx.guild_id.to_string())
+        .bind(ctx.scope.guild_id()?.to_string())
         .bind(res.role_id.to_string())
         .execute(&ctx.data.pool)
         .await
@@ -235,8 +236,8 @@ impl SettingUpdater<SettingsData> for GuildRolesExecutor {
         .bind(&res.perms)
         .bind(res.index)
         .bind(res.display_name)
-        .bind(ctx.author.to_string())
-        .bind(ctx.guild_id.to_string())
+        .bind(ctx.scope.user_id()?.to_string())
+        .bind(ctx.scope.guild_id()?.to_string())
         .bind(res.role_id.to_string())
         .execute(&ctx.data.pool)
         .await
@@ -264,7 +265,7 @@ impl SettingDeleter<SettingsData> for GuildRolesExecutor {
         }
 
         let Some(row): Option<GuildRolesRow> = sqlx::query_as("SELECT role_id, perms, index, display_name FROM guild_roles WHERE guild_id = $1 AND role_id = $2")
-        .bind(ctx.guild_id.to_string())
+        .bind(ctx.scope.guild_id()?.to_string())
         .bind(primary_key.to_string())
         .fetch_optional(&ctx.data.pool)
         .await
@@ -273,7 +274,7 @@ impl SettingDeleter<SettingsData> for GuildRolesExecutor {
         };
 
         let entry = indexmap::indexmap! {
-            "guild_id".to_string() => Value::String(ctx.guild_id.to_string()),
+            "guild_id".to_string() => Value::String(ctx.scope.guild_id()?.to_string()),
             "role_id".to_string() => Value::String(row.role_id),
             "perms".to_string() => Value::Array(row.perms.iter().map(|x| Value::String(x.to_string())).collect()),
             "index".to_string() => Value::Number(row.index.into()),
@@ -287,7 +288,7 @@ impl SettingDeleter<SettingsData> for GuildRolesExecutor {
         sqlx::query(
             "DELETE FROM guild_roles WHERE guild_id = $1 AND role_id = $2",
         )
-        .bind(ctx.guild_id.to_string())
+        .bind(ctx.scope.guild_id()?.to_string())
         .bind(res.role_id.to_string())
         .execute(&ctx.data.pool)
         .await
@@ -296,7 +297,7 @@ impl SettingDeleter<SettingsData> for GuildRolesExecutor {
         sqlx::query(
             "UPDATE guild_members SET needs_perm_rederive = true WHERE guild_id = $1 AND $2 = ANY(roles)",
         )
-        .bind(ctx.guild_id.to_string())
+        .bind(ctx.scope.guild_id()?.to_string())
         .bind(res.role_id.to_string())
         .execute(&ctx.data.pool)
         .await
@@ -354,7 +355,7 @@ impl GuildRolesExecutor {
                 let max_index_row: HighestIndexRow = sqlx::query_as(
                     "SELECT MAX(index) FROM guild_roles WHERE guild_id = $1",
                 )
-                .bind(ctx.guild_id.to_string())
+                .bind(ctx.scope.guild_id()?.to_string())
                 .fetch_one(&ctx.data.pool)
                 .await
                 .map_err(|e| format!("Failed to get highest index: {:?}", e))?;
@@ -408,14 +409,14 @@ impl GuildRolesExecutor {
             &ctx.serenity_context.cache,
             &ctx.serenity_context.http,
             &ctx.data.reqwest,
-            ctx.guild_id,
+            ctx.scope.guild_id()?,
             &sandwich_config(),
         )
         .await
         .map_err(|e| format!("Failed to get guild: {:?}", e))?;
 
         // If owner, early return
-        if guild.owner_id == ctx.author {
+        if guild.owner_id == ctx.scope.user_id()? {
             return Ok(GreBaseVerifyChecksResult {
                 index: new_index,
                 role_id: settings_role_id,
@@ -428,8 +429,8 @@ impl GuildRolesExecutor {
             &ctx.serenity_context.cache,
             &ctx.serenity_context.http,
             &ctx.data.reqwest,
-            ctx.guild_id,
-            ctx.author,
+            ctx.scope.guild_id()?,
+            ctx.scope.user_id()?,
             &sandwich_config(),
         )
         .await
@@ -449,7 +450,7 @@ impl GuildRolesExecutor {
             let query: Vec<GuildRolesRow> = sqlx::query_as(
                 "SELECT index, role_id, perms FROM guild_roles WHERE guild_id = $1",
             )
-            .bind(ctx.guild_id.to_string())
+            .bind(ctx.scope.guild_id()?.to_string())
             .fetch_all(&ctx.data.pool)
             .await
             .map_err(|e| format!("Failed to get current role configuration: {:?}", e))?;
@@ -509,9 +510,9 @@ impl GuildRolesExecutor {
 
         let author_kittycat_perms = silverpelt::member_permission_calc::get_kittycat_perms(
             &ctx.data.pool,
-            ctx.guild_id,
+            ctx.scope.guild_id()?,
             guild.owner_id,
-            ctx.author,
+            ctx.scope.user_id()?,
             &member.roles,
             kittycat_permission_config_data()
         )
@@ -728,13 +729,13 @@ impl GuildMembersExecutor {
             let current_public: GuildMembersRowPublic = sqlx::query_as(
                 "SELECT public FROM guild_members WHERE guild_id = $1 AND user_id = $2",
             )
-            .bind(ctx.guild_id.to_string())
+            .bind(ctx.scope.guild_id()?.to_string())
             .bind(user_id.to_string())
             .fetch_one(&ctx.data.pool)
             .await
             .map_err(|e| format!("Failed to get current public status: {:?}", e))?;
 
-            if *public != current_public.public && ctx.author != user_id {
+            if *public != current_public.public && ctx.scope.user_id()? != user_id {
                 return Err("Only the user themselves can change their (own) public status".into());
             }
         }
@@ -762,14 +763,14 @@ impl GuildMembersExecutor {
             &ctx.serenity_context.cache,
             &ctx.serenity_context.http,
             &ctx.data.reqwest,
-            ctx.guild_id,
+            ctx.scope.guild_id()?,
             &sandwich_config(),
         )
         .await
         .map_err(|e| format!("Failed to get guild: {:?}", e))?;
 
         // If owner, early return
-        if guild.owner_id == ctx.author {
+        if guild.owner_id == ctx.scope.user_id()? {
             return Ok(GmeBaseVerifyChecksResult {
                 user_id,
                 perm_overrides,
@@ -783,9 +784,9 @@ impl GuildMembersExecutor {
                 .get_kittycat_perms_for_user(
                     ctx,
                     &ctx.data.pool,
-                    ctx.guild_id,
+                    ctx.scope.guild_id()?,
                     guild.owner_id,
-                    ctx.author,
+                    ctx.scope.user_id()?,
                 )
                 .await
             {
@@ -801,7 +802,7 @@ impl GuildMembersExecutor {
                 .get_kittycat_perms_for_user(
                     ctx,
                     &ctx.data.pool,
-                    ctx.guild_id,
+                    ctx.scope.guild_id()?,
                     guild.owner_id,
                     user_id,
                 )
@@ -819,13 +820,13 @@ impl GuildMembersExecutor {
         let new_user_kittycat_perms = {
             let roles_str = silverpelt::member_permission_calc::create_roles_list_for_guild(
                 &target_member_roles,
-                ctx.guild_id,
+                ctx.scope.guild_id()?,
             );
 
             let user_positions =
                 silverpelt::member_permission_calc::get_user_positions_from_db(
                     &ctx.data.pool,
-                    ctx.guild_id,
+                    ctx.scope.guild_id()?,
                     &roles_str,
                 )
                 .await
@@ -902,7 +903,7 @@ impl SettingView<SettingsData> for GuildMembersExecutor {
         }
 
         let rows: Vec<GuildMembersRow> = sqlx::query_as("SELECT user_id, perm_overrides, public, created_at FROM guild_members WHERE guild_id = $1")
-        .bind(context.guild_id.to_string())
+        .bind(context.scope.guild_id()?.to_string())
         .fetch_all(&context.data.pool)
         .await
         .map_err(|e| format!("Error while fetching guild roles: {}", e))?;
@@ -911,7 +912,7 @@ impl SettingView<SettingsData> for GuildMembersExecutor {
 
         for row in rows {
             let map = indexmap::indexmap! {
-                "guild_id".to_string() => Value::String(context.guild_id.to_string()),
+                "guild_id".to_string() => Value::String(context.scope.guild_id()?.to_string()),
                 "user_id".to_string() => Value::String(row.user_id),
                 "perm_overrides".to_string() => Value::Array(row.perm_overrides.iter().map(|x| Value::String(x.to_string())).collect()),
                 "public".to_string() => Value::Bool(row.public),
@@ -939,7 +940,7 @@ impl SettingCreator<SettingsData> for GuildMembersExecutor {
         let count = sqlx::query(
             "SELECT COUNT(*) FROM guild_members WHERE guild_id = $1 AND user_id = $2",
         )
-        .bind(ctx.guild_id.to_string())
+        .bind(ctx.scope.guild_id()?.to_string())
         .bind(res.user_id.to_string())
         .fetch_one(&ctx.data.pool)
         .await
@@ -955,7 +956,7 @@ impl SettingCreator<SettingsData> for GuildMembersExecutor {
         sqlx::query(
             "INSERT INTO guild_members (guild_id, user_id, perm_overrides, public) VALUES ($1, $2, $3, $4)",
         )
-        .bind(ctx.guild_id.to_string())
+        .bind(ctx.scope.guild_id()?.to_string())
         .bind(res.user_id.to_string())
         .bind(res.perm_overrides.into_iter().map(|x| x.to_string()).collect::<Vec<String>>())
         .bind(res.public)
@@ -983,7 +984,7 @@ impl SettingUpdater<SettingsData> for GuildMembersExecutor {
         )
         .bind(res.perm_overrides.into_iter().map(|x| x.to_string()).collect::<Vec<String>>())
         .bind(res.public)
-        .bind(ctx.guild_id.to_string())
+        .bind(ctx.scope.guild_id()?.to_string())
         .bind(res.user_id.to_string())
         .execute(&ctx.data.pool)
         .await
@@ -1010,7 +1011,7 @@ impl SettingDeleter<SettingsData> for GuildMembersExecutor {
         }
 
         let Some(row): Option<GuildMembersRow> = sqlx::query_as("SELECT user_id, perm_overrides, public FROM guild_members WHERE guild_id = $1 AND user_id = $2")
-        .bind(ctx.guild_id.to_string())
+        .bind(ctx.scope.guild_id()?.to_string())
         .bind(primary_key.to_string())
         .fetch_optional(&ctx.data.pool)
         .await
@@ -1019,7 +1020,7 @@ impl SettingDeleter<SettingsData> for GuildMembersExecutor {
         };
 
         let entry = indexmap::indexmap! {
-            "guild_id".to_string() => Value::String(ctx.guild_id.to_string()),
+            "guild_id".to_string() => Value::String(ctx.scope.guild_id()?.to_string()),
             "user_id".to_string() => Value::String(row.user_id),
             "perm_overrides".to_string() => Value::Array(row.perm_overrides.iter().map(|x| Value::String(x.to_string())).collect()),
             "public".to_string() => Value::Bool(row.public),
@@ -1030,7 +1031,7 @@ impl SettingDeleter<SettingsData> for GuildMembersExecutor {
         sqlx::query(
             "DELETE FROM guild_members WHERE guild_id = $1 AND user_id = $2",
         )
-        .bind(ctx.guild_id.to_string())
+        .bind(ctx.scope.guild_id()?.to_string())
         .bind(res.user_id.to_string())
         .execute(&ctx.data.pool)
         .await
@@ -1176,7 +1177,7 @@ impl GuildTemplateExecutor {
             &ctx.serenity_context.cache,
             &ctx.serenity_context.http,
             &ctx.data.reqwest,
-            Some(ctx.guild_id),
+            Some(ctx.scope.guild_id()?),
             channel_id,
             &sandwich_config(),
         )
@@ -1191,7 +1192,7 @@ impl GuildTemplateExecutor {
             return Err(format!("Channel with id: {} and field: {} is not in a guild", channel_id, channel_field).into());
         };
 
-        if guild_channel.guild_id != ctx.guild_id {
+        if guild_channel.guild_id != ctx.scope.guild_id()? {
             return Err(format!("Channel with id: {} and field: {} is not in the same guild as the setting", channel_id, channel_field).into());
         }
 
@@ -1202,7 +1203,7 @@ impl GuildTemplateExecutor {
             &ctx.serenity_context.cache,
             &ctx.serenity_context.http,
             &ctx.data.reqwest,
-            ctx.guild_id,
+            ctx.scope.guild_id()?,
             bot_user_id,
             &sandwich_config(),
         )
@@ -1228,7 +1229,7 @@ impl GuildTemplateExecutor {
             &ctx.serenity_context.cache,
             &ctx.serenity_context.http,
             &ctx.data.reqwest,
-            ctx.guild_id,
+            ctx.scope.guild_id()?,
             &sandwich_config(),
         )
         .await
@@ -1279,7 +1280,7 @@ impl GuildTemplateExecutor {
     async fn post_action(&self, ctx: &SettingsData, name: &str) -> Result<(), Error> {
         // Dispatch a OnStartup event for the template
         AntiraidEvent::OnStartup(vec![name.to_string()])
-            .dispatch_to_template_worker_and_nowait(&ctx.data, ctx.guild_id, &template_dispatch_data())
+            .dispatch_to_template_worker_and_nowait(&ctx.data, ctx.scope.guild_id()?, &template_dispatch_data())
             .await
             .map_err(|e| format!("Failed to dispatch OnStartup event: {:?}", e))?;
 
@@ -1294,7 +1295,7 @@ impl SettingView<SettingsData> for GuildTemplateExecutor {
         context: &SettingsData,
         _filters: indexmap::IndexMap<String, Value>,
     ) -> Result<Vec<indexmap::IndexMap<String, Value>>, Error> {
-        log::info!("Viewing guild templates for guild id: {}", context.guild_id);
+        log::info!("Viewing guild templates for guild id: {}", context.scope.guild_id()?);
 
         check_perms(context,"guild_templates.view".into()).await?;
 
@@ -1314,7 +1315,7 @@ impl SettingView<SettingsData> for GuildTemplateExecutor {
         }
 
         let rows: Vec<TemplateRow> = sqlx::query_as("SELECT name, content, language, allowed_caps, paused, events, error_channel, created_at, created_by, last_updated_at, last_updated_by FROM guild_templates WHERE guild_id = $1")
-        .bind(context.guild_id.to_string())
+        .bind(context.scope.guild_id()?.to_string())
         .fetch_all(&context.data.pool)
         .await
         .map_err(|e| format!("Error while fetching guild templates: {}", e))?;
@@ -1323,7 +1324,7 @@ impl SettingView<SettingsData> for GuildTemplateExecutor {
 
         for row in rows {
             let map = indexmap::indexmap! {
-                "guild_id".to_string() => Value::String(context.guild_id.to_string()),
+                "guild_id".to_string() => Value::String(context.scope.guild_id()?.to_string()),
                 "name".to_string() => Value::String(row.name),
                 "content".to_string() => Value::String(row.content),
                 "language".to_string() => Value::String(row.language),
@@ -1369,7 +1370,7 @@ impl SettingCreator<SettingsData> for GuildTemplateExecutor {
         let count = sqlx::query(
             "SELECT COUNT(*) FROM guild_templates WHERE guild_id = $1 AND name = $2",
         )
-        .bind(ctx.guild_id.to_string())
+        .bind(ctx.scope.guild_id()?.to_string())
         .bind(name)
         .fetch_one(&ctx.data.pool)
         .await
@@ -1445,7 +1446,7 @@ impl SettingCreator<SettingsData> for GuildTemplateExecutor {
         sqlx::query(
             "INSERT INTO guild_templates (guild_id, name, language, content, events, paused, allowed_caps, error_channel, created_by, last_updated_by) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
         )
-        .bind(ctx.guild_id.to_string())
+        .bind(ctx.scope.guild_id()?.to_string())
         .bind(name)
         .bind(language)
         .bind(content)
@@ -1453,8 +1454,8 @@ impl SettingCreator<SettingsData> for GuildTemplateExecutor {
         .bind(paused)
         .bind(&allowed_caps)
         .bind(&error_channel)
-        .bind(ctx.author.to_string())
-        .bind(ctx.author.to_string())
+        .bind(ctx.scope.user_id()?.to_string())
+        .bind(ctx.scope.user_id()?.to_string())
         .execute(&ctx.data.pool)
         .await
         .map_err(|e| format!("Failed to insert template: {:?}", e))?;
@@ -1462,7 +1463,7 @@ impl SettingCreator<SettingsData> for GuildTemplateExecutor {
         self.post_action(ctx, name).await?;
 
         Ok(indexmap::indexmap! {
-            "guild_id".to_string() => Value::String(ctx.guild_id.to_string()),
+            "guild_id".to_string() => Value::String(ctx.scope.guild_id()?.to_string()),
             "name".to_string() => Value::String(name.to_string()),
             "language".to_string() => Value::String(language.to_string()),
             "content".to_string() => Value::String(content.to_string()),
@@ -1560,9 +1561,9 @@ impl SettingUpdater<SettingsData> for GuildTemplateExecutor {
         .bind(&events)
         .bind(&allowed_caps)
         .bind(language)
-        .bind(ctx.author.to_string())
+        .bind(ctx.scope.user_id()?.to_string())
         .bind(error_channel)
-        .bind(ctx.guild_id.to_string())
+        .bind(ctx.scope.guild_id()?.to_string())
         .bind(name)
         .bind(paused)
         .execute(&ctx.data.pool)
@@ -1591,7 +1592,7 @@ impl SettingDeleter<SettingsData> for GuildTemplateExecutor {
         let Some(row) = sqlx::query(
             "SELECT name FROM guild_templates WHERE guild_id = $1 AND name = $2",
         )
-        .bind(ctx.guild_id.to_string())
+        .bind(ctx.scope.guild_id()?.to_string())
         .bind(primary_key)
         .fetch_optional(&ctx.data.pool)
         .await
@@ -1605,7 +1606,7 @@ impl SettingDeleter<SettingsData> for GuildTemplateExecutor {
         sqlx::query(
             "DELETE FROM guild_templates WHERE guild_id = $1 AND name = $2",
         )
-        .bind(ctx.guild_id.to_string())
+        .bind(ctx.scope.guild_id()?.to_string())
         .bind(&name)
         .execute(&ctx.data.pool)
         .await
@@ -1679,7 +1680,7 @@ impl SettingView<SettingsData> for GuildTemplatesKVExecutor {
         }
 
         let rows: Vec<GuildTemplatesKVRow> = sqlx::query_as("SELECT key, value, created_at, last_updated_at FROM guild_templates_kv WHERE guild_id = $1")
-        .bind(context.guild_id.to_string())
+        .bind(context.scope.guild_id()?.to_string())
         .fetch_all(&context.data.pool)
         .await
         .map_err(|e| format!("Error while fetching guild templates kv: {}", e))?;
@@ -1688,7 +1689,7 @@ impl SettingView<SettingsData> for GuildTemplatesKVExecutor {
 
         for row in rows {
             let map = indexmap::indexmap! {
-                "guild_id".to_string() => Value::String(context.guild_id.to_string()),
+                "guild_id".to_string() => Value::String(context.scope.guild_id()?.to_string()),
                 "key".to_string() => Value::String(row.key),
                 "value".to_string() => row.value.unwrap_or(Value::Null),
                 "created_at".to_string() => Value::String(row.created_at.to_string()),
@@ -1718,7 +1719,7 @@ impl SettingCreator<SettingsData> for GuildTemplatesKVExecutor {
         let total_count: i64 = sqlx::query(
             "SELECT COUNT(*) FROM guild_templates_kv WHERE guild_id = $1",
         )
-        .bind(ctx.guild_id.to_string())
+        .bind(ctx.scope.guild_id()?.to_string())
         .fetch_one(&ctx.data.pool)
         .await
         .map_err(|e| format!("Failed to check total kv count: {:?}", e))?
@@ -1735,7 +1736,7 @@ impl SettingCreator<SettingsData> for GuildTemplatesKVExecutor {
         let count = sqlx::query(
             "SELECT COUNT(*) FROM guild_templates_kv WHERE guild_id = $1 AND key = $2",
         )
-        .bind(ctx.guild_id.to_string())
+        .bind(ctx.scope.guild_id()?.to_string())
         .bind(key)
         .fetch_one(&ctx.data.pool)
         .await
@@ -1755,7 +1756,7 @@ impl SettingCreator<SettingsData> for GuildTemplatesKVExecutor {
         sqlx::query(
             "INSERT INTO guild_templates_kv (guild_id, key, value, created_at, last_updated_at) VALUES ($1, $2, $3, NOW(), NOW())",
         )
-        .bind(ctx.guild_id.to_string())
+        .bind(ctx.scope.guild_id()?.to_string())
         .bind(key)
         .bind(value)
         .execute(&ctx.data.pool)
@@ -1765,10 +1766,10 @@ impl SettingCreator<SettingsData> for GuildTemplatesKVExecutor {
         // Dispatch a ExternalKeyUpdate event for the template
         AntiraidEvent::ExternalKeyUpdate(ExternalKeyUpdateEventData {
             key_modified: key.to_string(),
-            author: ctx.author,
+            author: ctx.scope.user_id()?,
             action: ExternalKeyUpdateEventDataAction::Create
         })
-        .dispatch_to_template_worker_and_nowait(&ctx.data, ctx.guild_id, &template_dispatch_data())
+        .dispatch_to_template_worker_and_nowait(&ctx.data, ctx.scope.guild_id()?, &template_dispatch_data())
         .await
         .map_err(|e| format!("Failed to dispatch ExternalKeyUpdate event: {:?}", e))?;
 
@@ -1797,7 +1798,7 @@ impl SettingUpdater<SettingsData> for GuildTemplatesKVExecutor {
             "UPDATE guild_templates_kv SET value = $1, last_updated_at = NOW() WHERE guild_id = $2 AND key = $3",
         )
         .bind(value)
-        .bind(ctx.guild_id.to_string())
+        .bind(ctx.scope.guild_id()?.to_string())
         .bind(key)
         .execute(&ctx.data.pool)
         .await
@@ -1806,10 +1807,10 @@ impl SettingUpdater<SettingsData> for GuildTemplatesKVExecutor {
     // Dispatch a ExternalKeyUpdate event for the template
     AntiraidEvent::ExternalKeyUpdate(ExternalKeyUpdateEventData {
         key_modified: key.to_string(),
-        author: ctx.author,
+        author: ctx.scope.user_id()?,
         action: ExternalKeyUpdateEventDataAction::Update
     })
-        .dispatch_to_template_worker_and_nowait(&ctx.data, ctx.guild_id, &template_dispatch_data())
+        .dispatch_to_template_worker_and_nowait(&ctx.data, ctx.scope.guild_id()?, &template_dispatch_data())
         .await
         .map_err(|e| format!("Failed to dispatch ExternalKeyUpdate event: {:?}", e))?;
 
@@ -1829,7 +1830,7 @@ impl SettingDeleter<SettingsData> for GuildTemplatesKVExecutor {
         if sqlx::query(
             "SELECT COUNT(*) FROM guild_templates_kv WHERE guild_id = $1 AND key = $2",
         )
-        .bind(ctx.guild_id.to_string())
+        .bind(ctx.scope.guild_id()?.to_string())
         .bind(primary_key.to_string())
         .fetch_one(&ctx.data.pool)
         .await
@@ -1845,7 +1846,7 @@ impl SettingDeleter<SettingsData> for GuildTemplatesKVExecutor {
         sqlx::query(
             "DELETE FROM guild_templates_kv WHERE guild_id = $1 AND key = $2",
         )
-        .bind(ctx.guild_id.to_string())
+        .bind(ctx.scope.guild_id()?.to_string())
         .bind(primary_key.to_string())
         .execute(&ctx.data.pool)
         .await
@@ -1854,10 +1855,10 @@ impl SettingDeleter<SettingsData> for GuildTemplatesKVExecutor {
         // Dispatch a ExternalKeyUpdate event for the template
         AntiraidEvent::ExternalKeyUpdate(ExternalKeyUpdateEventData {
             key_modified: primary_key.to_string(),
-            author: ctx.author,
+            author: ctx.scope.user_id()?,
             action: ExternalKeyUpdateEventDataAction::Delete
         })
-        .dispatch_to_template_worker_and_nowait(&ctx.data, ctx.guild_id, &template_dispatch_data())
+        .dispatch_to_template_worker_and_nowait(&ctx.data, ctx.scope.guild_id()?, &template_dispatch_data())
         .await
         .map_err(|e| format!("Failed to dispatch ExternalKeyUpdate event: {:?}", e))?;
 
@@ -2072,7 +2073,7 @@ impl SettingView<SettingsData> for GuildTemplateShopExecutor {
         }
 
         let rows: Vec<GuildTemplateShopRow> = sqlx::query_as("SELECT id, name, friendly_name, language, allowed_caps, version, description, content, type, events, created_at, created_by, last_updated_at, last_updated_by FROM template_shop WHERE owner_guild = $1")
-        .bind(context.guild_id.to_string())
+        .bind(context.scope.guild_id()?.to_string())
         .fetch_all(&context.data.pool)
         .await
         .map_err(|e| format!("Error while fetching shop templates: {}", e))?;
@@ -2095,7 +2096,7 @@ impl SettingView<SettingsData> for GuildTemplateShopExecutor {
                 "events".to_string() => {
                     Value::Array(row.events.iter().map(|x| Value::String(x.to_string())).collect())
                 },
-                "owner_guild".to_string() => Value::String(context.guild_id.to_string()),
+                "owner_guild".to_string() => Value::String(context.scope.guild_id()?.to_string()),
                 "created_at".to_string() => Value::String(row.created_at.to_string()),
                 "created_by".to_string() => Value::String(row.created_by),
                 "last_updated_at".to_string() => Value::String(row.last_updated_at.to_string()),
@@ -2147,7 +2148,7 @@ impl SettingCreator<SettingsData> for GuildTemplateShopExecutor {
             let count = sqlx::query(
                 "SELECT COUNT(*) FROM template_shop WHERE owner_guild = $1 AND name = $2",
             )
-            .bind(ctx.guild_id.to_string())
+            .bind(ctx.scope.guild_id()?.to_string())
             .bind(namespace)
             .fetch_one(&ctx.data.pool)
             .await
@@ -2182,7 +2183,7 @@ impl SettingCreator<SettingsData> for GuildTemplateShopExecutor {
         let count = sqlx::query(
             "SELECT COUNT(*) FROM template_shop WHERE owner_guild = $1 AND name = $2 AND version = $3",
         )
-        .bind(ctx.guild_id.to_string())
+        .bind(ctx.scope.guild_id()?.to_string())
         .bind(name)
         .bind(version)
         .fetch_one(&ctx.data.pool)
@@ -2255,9 +2256,9 @@ impl SettingCreator<SettingsData> for GuildTemplateShopExecutor {
         .bind(content)
         .bind(r#type)
         .bind(&events)
-        .bind(ctx.guild_id.to_string())
-        .bind(ctx.author.to_string())
-        .bind(ctx.author.to_string())
+        .bind(ctx.scope.guild_id()?.to_string())
+        .bind(ctx.scope.user_id()?.to_string())
+        .bind(ctx.scope.user_id()?.to_string())
         .bind(&allowed_caps)
         .fetch_one(&ctx.data.pool)
         .await
@@ -2291,7 +2292,7 @@ impl SettingUpdater<SettingsData> for GuildTemplateShopExecutor {
         let count = sqlx::query(
             "SELECT COUNT(*) FROM template_shop WHERE owner_guild = $1 AND id = $2",
         )
-        .bind(ctx.guild_id.to_string())
+        .bind(ctx.scope.guild_id()?.to_string())
         .bind(id)
         .fetch_one(&ctx.data.pool)
         .await
@@ -2322,8 +2323,8 @@ impl SettingUpdater<SettingsData> for GuildTemplateShopExecutor {
         .bind(description)
         .bind(r#type)
         .bind(friendly_name)
-        .bind(ctx.author.to_string())
-        .bind(ctx.guild_id.to_string())
+        .bind(ctx.scope.user_id()?.to_string())
+        .bind(ctx.scope.guild_id()?.to_string())
         .bind(id)
         .execute(&ctx.data.pool)
         .await
@@ -2351,7 +2352,7 @@ impl SettingDeleter<SettingsData> for GuildTemplateShopExecutor {
         let Some(row) = sqlx::query(
             "SELECT id FROM template_shop WHERE owner_guild = $1 AND id = $2",
         )
-        .bind(ctx.guild_id.to_string())
+        .bind(ctx.scope.guild_id()?.to_string())
         .bind(primary_key)
         .fetch_optional(&ctx.data.pool)
         .await
@@ -2365,7 +2366,7 @@ impl SettingDeleter<SettingsData> for GuildTemplateShopExecutor {
         sqlx::query(
             "DELETE FROM template_shop WHERE owner_guild = $1 AND id = $2",
         )
-        .bind(ctx.guild_id.to_string())
+        .bind(ctx.scope.guild_id()?.to_string())
         .bind(id)
         .execute(&ctx.data.pool)
         .await
@@ -2590,7 +2591,7 @@ impl SettingView<SettingsData> for LockdownSettingsExecutor {
         }
 
         let rows: Vec<LockdownRow> = sqlx::query_as("SELECT member_roles, require_correct_layout, created_at, created_by, last_updated_at, last_updated_by FROM lockdown__guilds WHERE guild_id = $1")
-            .bind(context.guild_id.to_string())
+            .bind(context.scope.guild_id()?.to_string())
             .fetch_all(&context.data.pool)
             .await
             .map_err(|e| format!("Error while fetching lockdowns: {}", e))?;
@@ -2599,7 +2600,7 @@ impl SettingView<SettingsData> for LockdownSettingsExecutor {
 
         for row in rows {
             let map = indexmap::indexmap! {
-                "guild_id".to_string() => Value::String(context.guild_id.to_string()),
+                "guild_id".to_string() => Value::String(context.scope.guild_id()?.to_string()),
                 "member_roles".to_string() => Value::Array(row.member_roles.into_iter().map(Value::String).collect()),
                 "require_correct_layout".to_string() => Value::Bool(row.require_correct_layout),
                 "created_at".to_string() => Value::String(row.created_at.to_string()),
@@ -2640,11 +2641,11 @@ impl SettingCreator<SettingsData> for LockdownSettingsExecutor {
         sqlx::query(
             "INSERT INTO lockdown__guilds (guild_id, member_roles, require_correct_layout, created_at, created_by, last_updated_at, last_updated_by) VALUES ($1, $2, $3, NOW(), $4, NOW(), $5)",
         )
-        .bind(context.guild_id.to_string())
+        .bind(context.scope.guild_id()?.to_string())
         .bind(&member_roles)
         .bind(require_correct_layout)
-        .bind(context.author.to_string())
-        .bind(context.author.to_string())
+        .bind(context.scope.user_id()?.to_string())
+        .bind(context.scope.user_id()?.to_string())
         .execute(&context.data.pool)
         .await
         .map_err(|e| format!("Error while creating lockdown settings: {}", e))?;
@@ -2678,7 +2679,7 @@ impl SettingUpdater<SettingsData> for LockdownSettingsExecutor {
         let count = sqlx::query(
             "SELECT COUNT(*) FROM lockdown__guilds WHERE guild_id = $1",
         )
-        .bind(context.guild_id.to_string())
+        .bind(context.scope.guild_id()?.to_string())
         .fetch_one(&context.data.pool)
         .await
         .map_err(|e| format!("Error while updating lockdown settings: {}", e))?
@@ -2693,10 +2694,10 @@ impl SettingUpdater<SettingsData> for LockdownSettingsExecutor {
         sqlx::query(
             "UPDATE lockdown__guilds SET member_roles = $2, require_correct_layout = $3, last_updated_at = NOW(), last_updated_by = $4 WHERE guild_id = $1",
         )
-        .bind(context.guild_id.to_string())
+        .bind(context.scope.guild_id()?.to_string())
         .bind(&member_roles)
         .bind(require_correct_layout)
-        .bind(context.author.to_string())
+        .bind(context.scope.user_id()?.to_string())
         .execute(&context.data.pool)
         .await
         .map_err(|e| format!("Error while creating lockdown settings: {}", e))?;
@@ -2715,7 +2716,7 @@ impl SettingDeleter<SettingsData> for LockdownSettingsExecutor {
         check_perms(context,"lockdown_settings.delete".into()).await?;
 
         sqlx::query("DELETE FROM lockdown__guilds WHERE guild_id = $1")
-            .bind(context.guild_id.to_string())
+            .bind(context.scope.guild_id()?.to_string())
             .execute(&context.data.pool)
             .await
             .map_err(|e| format!("Error while deleting lockdown settings: {}", e))?;
@@ -2818,7 +2819,7 @@ impl SettingView<SettingsData> for LockdownExecutor {
         }
 
         let rows: Vec<LockdownRow> = sqlx::query_as("SELECT id, data, type, reason, created_at FROM lockdown__guild_lockdowns WHERE guild_id = $1")
-            .bind(context.guild_id.to_string())
+            .bind(context.scope.guild_id()?.to_string())
             .fetch_all(&context.data.pool)
             .await
             .map_err(|e| format!("Error while fetching lockdowns: {}", e))?;
@@ -2828,7 +2829,7 @@ impl SettingView<SettingsData> for LockdownExecutor {
         for row in rows {
             let map = indexmap::indexmap! {
                 "id".to_string() => Value::String(row.id.to_string()),
-                "guild_id".to_string() => Value::String(context.guild_id.to_string()),
+                "guild_id".to_string() => Value::String(context.scope.guild_id()?.to_string()),
                 "data".to_string() => row.data,
                 "type".to_string() => Value::String(row.r#type),
                 "reason".to_string() => Value::String(row.reason),
@@ -2861,7 +2862,7 @@ impl SettingCreator<SettingsData> for LockdownExecutor {
 
         // Get the current lockdown set
         let mut lockdowns = lockdowns::LockdownSet::guild(
-            context.guild_id, 
+            context.scope.guild_id()?, 
             LockdownData::new(
                 &context.serenity_context.cache,
                 context.serenity_context.http(),
@@ -2935,7 +2936,7 @@ impl SettingDeleter<SettingsData> for LockdownExecutor {
 
         // Get the current lockdown set
         let mut lockdowns = lockdowns::LockdownSet::guild(
-            context.guild_id, 
+            context.scope.guild_id()?, 
             LockdownData::new(
                 &context.serenity_context.cache,
                 context.serenity_context.http(),

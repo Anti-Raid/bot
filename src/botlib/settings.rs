@@ -6,12 +6,37 @@ use serenity::all::{CreateInteractionResponse, CreateInteractionResponseMessage}
 use silverpelt::data::Data;
 use std::sync::Arc;
 
+#[derive(Debug, Clone, Copy)]
+pub enum RequestScope {
+    Guild((serenity::all::GuildId, serenity::all::UserId)),
+    Anonymous,
+}
+
+impl RequestScope {
+    pub fn guild_id(&self) -> Result<serenity::all::GuildId, crate::Error> {
+        match self {
+            RequestScope::Guild((guild_id, _)) => Ok(*guild_id),
+            RequestScope::Anonymous => {
+                Err("This setting cannot be used in an anonymous context".into())
+            }
+        }
+    }
+
+    pub fn user_id(&self) -> Result<serenity::all::UserId, crate::Error> {
+        match self {
+            RequestScope::Guild((_, user_id)) => Ok(*user_id),
+            RequestScope::Anonymous => {
+                Err("This setting cannot be used in an anonymous context".into())
+            }
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct SettingsData {
     pub data: Arc<Data>,
     pub serenity_context: serenity::all::Context,
-    pub guild_id: serenity::all::GuildId,
-    pub author: serenity::all::UserId,
+    pub scope: RequestScope,
 }
 
 impl Default for SettingsData {
@@ -29,14 +54,12 @@ impl serde::Serialize for SettingsData {
 /// Given the Data and a cache_http, returns the settings data
 pub fn settings_data(
     serenity_context: serenity::all::Context,
-    guild_id: serenity::all::GuildId,
-    author: serenity::all::UserId,
+    scope: RequestScope,
 ) -> SettingsData {
     SettingsData {
         data: serenity_context.data::<Data>(),
         serenity_context,
-        guild_id,
-        author,
+        scope,
     }
 }
 
@@ -98,7 +121,7 @@ pub async fn execute_setting_interaction(
 
     let subcommand_wrapper = SubcommandCallbackWrapper {
         config_option: setting,
-        data: settings_data(ctx.clone(), guild_id, cmd.user.id).into(),
+        data: settings_data(ctx.clone(), RequestScope::Guild((guild_id, cmd.user.id))).into(),
         operation_type: op,
     };
 
