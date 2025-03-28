@@ -1,4 +1,5 @@
 use log::{error, info};
+use silverpelt::objectstore::guild_bucket;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::Row;
 use std::io::Write;
@@ -207,5 +208,109 @@ pub async fn start() {
             .expect("Could not set new column as not nullable");
 
         tx.commit().await.expect("Could not commit transaction");
+    }
+
+    //* Migration #3 - Migrate jobs to per-guild buckets
+    println!("seaweed -> per-guild buckets");
+
+    let object_store = CONFIG
+        .object_storage
+        .build()
+        .expect("Could not initialize object store");
+
+    #[derive(sqlx::FromRow)]
+    struct JobRow {
+        id: uuid::Uuid,
+        guild_id: String,
+        output: Option<serde_json::Value>,
+    }
+
+    let jobs: Vec<JobRow> = sqlx::query_as("SELECT id, guild_id, output FROM jobs")
+        .fetch_all(&pg_pool)
+        .await
+        .expect("Could not fetch jobs");
+
+    let reqwest_client = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(30))
+        .timeout(std::time::Duration::from_secs(90))
+        .build()
+        .expect("Could not initialize reqwest client");
+
+    for job in jobs {
+        let Some(output) = job.output else {
+            println!("INFO: Job {} has no output, skipping", job.id);
+            continue;
+        };
+
+        let Ok(guild_id) = job.guild_id.parse::<serenity::all::GuildId>() else {
+            println!("WARNING: Could not parse guild id: {}", job.guild_id);
+            continue;
+        };
+
+        #[derive(serde::Serialize, serde::Deserialize, Clone)]
+        pub struct JobOutput {
+            pub filename: String,
+            pub perguild: Option<bool>,
+        }
+
+        let output = match serde_json::from_value::<JobOutput>(output.clone()) {
+            Ok(output) => output,
+            Err(e) => {
+                println!(
+                    "WARNING: Could not parse output: {} due to error {}",
+                    output, e
+                );
+                continue;
+            }
+        };
+
+        if output.perguild.unwrap_or(false) {
+            println!("INFO: Job {} is a per-guild job, skipping", job.id);
+            continue;
+        }
+
+        let file_url = object_store
+            .get_url(
+                "antiraid",
+                &format!("jobs/{}/{}", job.id, output.filename),
+                std::time::Duration::from_secs(600),
+            )
+            .await
+            .expect("Could not create url");
+
+        let file_data = reqwest_client
+            .get(&file_url)
+            .send()
+            .await
+            .expect("Could not download file")
+            .error_for_status()
+            .expect("Could not download file [status code not ok]")
+            .bytes()
+            .await
+            .expect("Could not read file data")
+            .to_vec();
+
+        object_store
+            .upload_file(
+                &guild_bucket(guild_id),
+                &format!("jobs/{}/{}", job.id, output.filename),
+                file_data,
+            )
+            .await
+            .expect("Could not upload file");
+
+        // Update database with migration status
+        sqlx::query("UPDATE jobs SET output = $1 WHERE id = $2")
+            .bind(
+                serde_json::to_value(JobOutput {
+                    filename: output.filename,
+                    perguild: Some(true),
+                })
+                .expect("Could not serialize data"),
+            )
+            .bind(job.id)
+            .execute(&pg_pool)
+            .await
+            .expect("Could not update job");
     }
 }

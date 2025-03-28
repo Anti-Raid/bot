@@ -31,7 +31,7 @@ pub enum ObjectStorageType {
 pub struct ObjectStorage {
     #[serde(rename = "type")]
     pub object_storage_type: ObjectStorageType,
-    pub path: String,
+    pub base_path: String,
     pub endpoint: Option<String>,
     pub secure: Option<bool>,
     pub cdn_secure: Option<bool>,
@@ -65,7 +65,7 @@ impl ObjectStorage {
                     secret_key.to_string(),
                 )
             }
-            ObjectStorageType::Local => Ok(ObjectStore::new_local(self.path.clone())),
+            ObjectStorageType::Local => Ok(ObjectStore::new_local(self.base_path.clone())),
         }
     }
 }
