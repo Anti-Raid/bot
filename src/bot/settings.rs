@@ -1840,11 +1840,15 @@ impl SettingDeleter<SettingsData> for GuildTemplatesKVExecutor {
     ) -> Result<(), Error> {
         check_perms(ctx, "guild_templates_kv.delete".into()).await?;
 
+        let Value::String(primary_key) = primary_key else {
+            return Err("Invalid primary key".into());
+        };
+
         if sqlx::query(
             "SELECT COUNT(*) FROM guild_templates_kv WHERE guild_id = $1 AND key = $2",
         )
         .bind(ctx.scope.guild_id()?.to_string())
-        .bind(primary_key.to_string())
+        .bind(&primary_key)
         .fetch_one(&ctx.data.pool)
         .await
         .map_err(|e| format!("Error while fetching kv: {}", e))?
