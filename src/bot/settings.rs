@@ -2922,13 +2922,13 @@ impl SettingCreator<SettingsData> for LockdownExecutor {
         )?;
 
         lockdowns
-            .easy_apply(lockdown_type, reason)
+            .apply(lockdown_type, reason)
             .await
             .map_err(|e| format!("Error while applying lockdown: {}", e))?;
 
         let created_lockdown =
         lockdowns
-            .lockdowns
+            .lockdowns()
             .last()
             .ok_or_else(|| "No lockdowns created!".to_string())?;
         
@@ -2973,7 +2973,7 @@ impl SettingDeleter<SettingsData> for LockdownExecutor {
 
         // Remove the lockdown
         lockdowns
-            .easy_remove(primary_key)
+            .remove(primary_key)
             .await
             .map_err(|e| format!("Error while removing lockdown: {}", e))?;
 

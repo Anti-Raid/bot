@@ -98,13 +98,13 @@ pub async fn lockdowns_list(ctx: Context<'_>) -> Result<(), Error> {
     .await
     .map_err(|e| format!("Error while fetching lockdown set: {}", e))?;
 
-    if lockdowns.lockdowns.is_empty() {
+    if lockdowns.lockdowns().is_empty() {
         return Err("No active lockdowns".into());
     }
 
     let mut msg = String::new();
 
-    for lockdown in lockdowns.lockdowns {
+    for lockdown in lockdowns.lockdowns() {
         msg.push_str(&format!(
             "ID: {}, Type: {}, Reason: {}\n",
             lockdown.id,
@@ -165,7 +165,7 @@ pub async fn lockdowns_tsl(ctx: Context<'_>, reason: String) -> Result<(), Error
     ctx.defer().await?;
 
     lockdowns
-        .easy_apply(Box::new(lockdown_type), &reason)
+        .apply(Box::new(lockdown_type), &reason)
         .await
         .map_err(|e| format!("Error while applying lockdown: {}", e))?;
 
@@ -214,7 +214,7 @@ pub async fn lockdowns_qsl(ctx: Context<'_>, reason: String) -> Result<(), Error
     ctx.defer().await?;
 
     lockdowns
-        .easy_apply(Box::new(lockdown_type), &reason)
+        .apply(Box::new(lockdown_type), &reason)
         .await
         .map_err(|e| format!("Error while applying lockdown: {}", e))?;
 
@@ -268,7 +268,7 @@ pub async fn lockdowns_scl(
     ctx.defer().await?;
 
     lockdowns
-        .easy_apply(Box::new(lockdown_type), &reason)
+        .apply(Box::new(lockdown_type), &reason)
         .await
         .map_err(|e| format!("Error while applying lockdown: {}", e))?;
 
@@ -321,7 +321,7 @@ pub async fn lockdowns_role(
     ctx.defer().await?;
 
     lockdowns
-        .easy_apply(Box::new(lockdown_type), &reason)
+        .apply(Box::new(lockdown_type), &reason)
         .await
         .map_err(|e| format!("Error while applying lockdown: {}", e))?;
 
@@ -370,7 +370,7 @@ pub async fn lockdowns_remove(
     ctx.defer().await?;
 
     lockdowns
-        .easy_remove(id.parse()?)
+        .remove(id.parse()?)
         .await
         .map_err(|e| format!("Error while applying lockdown: {}", e))?;
 
