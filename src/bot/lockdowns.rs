@@ -88,8 +88,8 @@ pub async fn lockdowns_list(ctx: Context<'_>) -> Result<(), Error> {
     let lockdowns = lockdowns::LockdownSet::guild(
         guild_id,
         LockdownData::new(
-            ctx.cache(),
-            ctx.http(),
+            ctx.serenity_context().cache.clone(),
+            ctx.serenity_context().http.clone(),
             data.pool.clone(),
             data.reqwest.clone(),
             sandwich_config(),
@@ -149,8 +149,8 @@ pub async fn lockdowns_tsl(ctx: Context<'_>, reason: String) -> Result<(), Error
     let mut lockdowns = lockdowns::LockdownSet::guild(
         guild_id,
         LockdownData::new(
-            ctx.cache(),
-            ctx.http(),
+            ctx.serenity_context().cache.clone(),
+            ctx.serenity_context().http.clone(),
             data.pool.clone(),
             data.reqwest.clone(),
             sandwich_config(),
@@ -198,8 +198,8 @@ pub async fn lockdowns_qsl(ctx: Context<'_>, reason: String) -> Result<(), Error
     let mut lockdowns = lockdowns::LockdownSet::guild(
         guild_id,
         LockdownData::new(
-            ctx.cache(),
-            ctx.http(),
+            ctx.serenity_context().cache.clone(),
+            ctx.serenity_context().http.clone(),
             data.pool.clone(),
             data.reqwest.clone(),
             sandwich_config(),
@@ -252,8 +252,8 @@ pub async fn lockdowns_scl(
     let mut lockdowns = lockdowns::LockdownSet::guild(
         guild_id,
         LockdownData::new(
-            ctx.cache(),
-            ctx.http(),
+            ctx.serenity_context().cache.clone(),
+            ctx.serenity_context().http.clone(),
             data.pool.clone(),
             data.reqwest.clone(),
             sandwich_config(),
@@ -305,8 +305,8 @@ pub async fn lockdowns_role(
     let mut lockdowns = lockdowns::LockdownSet::guild(
         guild_id,
         LockdownData::new(
-            ctx.cache(),
-            ctx.http(),
+            ctx.serenity_context().cache.clone(),
+            ctx.serenity_context().http.clone(),
             data.pool.clone(),
             data.reqwest.clone(),
             sandwich_config(),
@@ -357,8 +357,8 @@ pub async fn lockdowns_remove(
     let mut lockdowns = lockdowns::LockdownSet::guild(
         guild_id,
         LockdownData::new(
-            ctx.cache(),
-            ctx.http(),
+            ctx.serenity_context().cache.clone(),
+            ctx.serenity_context().http.clone(),
             data.pool.clone(),
             data.reqwest.clone(),
             sandwich_config(),

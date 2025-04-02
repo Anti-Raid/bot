@@ -13,7 +13,6 @@ use std::sync::LazyLock;
 use async_trait::async_trait;
 use crate::botlib::settings::SettingsData;
 use crate::Error;
-use serenity::all::CacheHttp;
 use silverpelt::lockdowns::LockdownData;
 use sqlx::Row;
 
@@ -2887,8 +2886,8 @@ impl SettingCreator<SettingsData> for LockdownExecutor {
         let mut lockdowns = lockdowns::LockdownSet::guild(
             context.scope.guild_id()?, 
             LockdownData::new(
-                &context.serenity_context.cache,
-                context.serenity_context.http(),
+                context.serenity_context.cache.clone(),
+                context.serenity_context.http.clone(),
                 context.data.pool.clone(),
                 context.data.reqwest.clone(),
                 sandwich_config(),
@@ -2961,8 +2960,8 @@ impl SettingDeleter<SettingsData> for LockdownExecutor {
         let mut lockdowns = lockdowns::LockdownSet::guild(
             context.scope.guild_id()?, 
             LockdownData::new(
-                &context.serenity_context.cache,
-                context.serenity_context.http(),
+                context.serenity_context.cache.clone(),
+                context.serenity_context.http.clone(),
                 context.data.pool.clone(),
                 context.data.reqwest.clone(),
                 sandwich_config(),
