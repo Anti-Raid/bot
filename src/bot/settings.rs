@@ -203,15 +203,6 @@ impl SettingCreator<SettingsData> for GuildRolesExecutor {
         .await
         .map_err(|e| format!("Failed to insert role: {:?}", e))?;
 
-        sqlx::query(
-            "UPDATE guild_members SET needs_perm_rederive = true WHERE guild_id = $1 AND $2 = ANY(roles)",
-        )
-        .bind(ctx.scope.guild_id()?.to_string())
-        .bind(res.role_id.to_string())
-        .execute(&ctx.data.pool)
-        .await
-        .map_err(|e| format!("Failed to update guild members cache: {:?}", e))?;
-
         Ok(entry)
     }
 }
@@ -255,6 +246,10 @@ impl SettingDeleter<SettingsData> for GuildRolesExecutor {
     ) -> Result<(), Error> {
         check_perms(ctx, "guild_roles.delete".into()).await?;
 
+        let Value::String(primary_key) = primary_key else {
+            return Err("Could not parse primary key as string".into());
+        };
+
         #[derive(sqlx::FromRow)]
         struct GuildRolesRow {
             role_id: String,
@@ -265,7 +260,7 @@ impl SettingDeleter<SettingsData> for GuildRolesExecutor {
 
         let Some(row): Option<GuildRolesRow> = sqlx::query_as("SELECT role_id, perms, index, display_name FROM guild_roles WHERE guild_id = $1 AND role_id = $2")
         .bind(ctx.scope.guild_id()?.to_string())
-        .bind(primary_key.to_string())
+        .bind(&primary_key)
         .fetch_optional(&ctx.data.pool)
         .await
         .map_err(|e| format!("Error while fetching roles: {}", e))? else {
@@ -292,15 +287,6 @@ impl SettingDeleter<SettingsData> for GuildRolesExecutor {
         .execute(&ctx.data.pool)
         .await
         .map_err(|e| format!("Failed to delete role: {:?}", e))?;
-
-        sqlx::query(
-            "UPDATE guild_members SET needs_perm_rederive = true WHERE guild_id = $1 AND $2 = ANY(roles)",
-        )
-        .bind(ctx.scope.guild_id()?.to_string())
-        .bind(res.role_id.to_string())
-        .execute(&ctx.data.pool)
-        .await
-        .map_err(|e| format!("Failed to update guild members cache: {:?}", e))?;
 
         Ok(())
     }
