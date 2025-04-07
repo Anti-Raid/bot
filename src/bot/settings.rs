@@ -1968,20 +1968,20 @@ pub static GUILD_TEMPLATE_SHOP: LazyLock<Setting<SettingsData>> = LazyLock::new(
             Column {
                 id: "content".to_string(),
                 name: "Content".to_string(),
-                description: "The content of the script. Cannot be updated once set (use a new version for that)".to_string(),
+                description: "The content of the script.".to_string(),
                 column_type: ColumnType::new_scalar(InnerColumnType::Json {
                     kind: "template".to_string(),
                     max_bytes: Some(1024 * 1024 * 5), // 5MB
                 }),
                 nullable: false,
                 suggestions: ColumnSuggestion::None {},
-                ignored_for: vec![OperationType::Update],
+                ignored_for: vec![],
                 secret: false,
             },
             Column {
                 id: "events".to_string(),
                 name: "Events".to_string(),
-                description: "The events that this script should be executed on., Cannot be changed once set".to_string(),
+                description: "The events that this script should be executed on.".to_string(),
                 column_type: ColumnType::new_array(InnerColumnType::String {
                     kind: "normal".to_string(),
                     min_length: None,
@@ -1999,13 +1999,13 @@ pub static GUILD_TEMPLATE_SHOP: LazyLock<Setting<SettingsData>> = LazyLock::new(
                 }),
                 nullable: false,
                 suggestions: ColumnSuggestion::None {},
-                ignored_for: vec![OperationType::Update],
+                ignored_for: vec![],
                 secret: false,
             },
             Column {
                 id: "allowed_caps".to_string(),
                 name: "Capabilities".to_string(),
-                description: "The capabilities the script needs to perform its full functionality. Cannot be changed once set".to_string(),
+                description: "The capabilities the script needs to perform its full functionality.".to_string(),
                 column_type: ColumnType::new_array(InnerColumnType::String { min_length: None, max_length: None, allowed_values: vec![], kind: "normal".to_string() }),
                 nullable: true,
                 suggestions: ColumnSuggestion::Static {
@@ -2013,7 +2013,7 @@ pub static GUILD_TEMPLATE_SHOP: LazyLock<Setting<SettingsData>> = LazyLock::new(
                         "discord:create_message".to_string()
                     ]
                 },
-                ignored_for: vec![OperationType::Update],
+                ignored_for: vec![],
                 secret: false,
             },
             Column {
@@ -2296,21 +2296,21 @@ impl SettingUpdater<SettingsData> for GuildTemplateShopExecutor {
 
         let id: uuid::Uuid = id.parse().map_err(|e| format!("Failed to parse ID: {:?}", e))?;
 
-        let count = sqlx::query(
-            "SELECT COUNT(*) FROM template_shop WHERE owner_guild = $1 AND id = $2",
+        #[derive(sqlx::FromRow)]
+        pub struct TemplateShopData {
+            pub name: String,
+            pub version: String,
+        }
+
+        let data: TemplateShopData = sqlx::query_as(
+            "SELECT name, version FROM template_shop WHERE owner_guild = $1 AND id = $2",
         )
         .bind(ctx.scope.guild_id()?.to_string())
         .bind(id)
-        .fetch_one(&ctx.data.pool)
+        .fetch_optional(&ctx.data.pool)
         .await
         .map_err(|e| format!("Failed to check if shop template exists: {:?}", e))?
-        .try_get::<i64, _>(0)
-        .map_err(|e| format!("Failed to get count: {:?}", e))
-        .unwrap_or_default();
-
-        if count <= 0 {
-            return Err("Shop template does not exist".into());
-        }
+        .ok_or_else(|| "Shop template does not exist".to_string())?;
 
         let Some(Value::String(friendly_name)) = entry.get("friendly_name") else {
             return Err("Missing or invalid field: `friendly_name`".into());
@@ -2324,8 +2324,57 @@ impl SettingUpdater<SettingsData> for GuildTemplateShopExecutor {
             return Err("Missing or invalid field: `type`".into());
         };
 
+        let Some(content) = entry.get("content") else {
+            return Err("Missing or invalid field: `content`".into());
+        };
+
+        // Try to parse content as a hashmap<String, String>
+        let string_form = serde_json::to_string(&content)
+            .map_err(|e| format!("Failed to convert content to string: {:?}", e))?;
+
+        let _: indexmap::IndexMap<String, Value> = serde_json::from_str(&string_form)   
+            .map_err(|e| format!("Failed to parse content: {:?}", e))?;     
+
+        let Some(Value::String(r#type)) = entry.get("type") else {
+            return Err("Missing or invalid field: `type`".into());
+        };
+
+        let events = match entry.get("events") {
+            Some(Value::Array(events)) => 
+                events
+                    .iter()
+                    .map(|x| {
+                        if let Value::String(x) = x {
+                            Ok(x.to_string())
+                        } else {
+                            Err("Failed to parse events".into())
+                        }
+                    })
+                    .collect::<Result<Vec<String>, Error>>()?,
+            _ => {
+                vec![]
+            },
+        };
+
+        let allowed_caps = match entry.get("allowed_caps") {
+            Some(Value::Array(allowed_caps)) => 
+                allowed_caps
+                    .iter()
+                    .map(|x| {
+                        if let Value::String(x) = x {
+                            Ok(x.to_string())
+                        } else {
+                            Err(format!("Failed to parse allowed capabilities due to invalid capability: {:?}", x).into())
+                        }
+                    })
+                    .collect::<Result<Vec<String>, Error>>()?,
+            _ => {
+                vec![]
+            },
+        };
+
         sqlx::query(
-            "UPDATE template_shop SET description = $1, type = $2, friendly_name = $3, last_updated_at = NOW(), last_updated_by = $4 WHERE owner_guild = $5 AND id = $6",
+            "UPDATE template_shop SET description = $1, type = $2, friendly_name = $3, last_updated_at = NOW(), last_updated_by = $4, events = $7, allowed_caps = $8, content = $9 WHERE owner_guild = $5 AND id = $6",
         )
         .bind(description)
         .bind(r#type)
@@ -2333,9 +2382,51 @@ impl SettingUpdater<SettingsData> for GuildTemplateShopExecutor {
         .bind(ctx.scope.user_id()?.to_string())
         .bind(ctx.scope.guild_id()?.to_string())
         .bind(id)
+        .bind(&events)
+        .bind(&allowed_caps)
+        .bind(content)
         .execute(&ctx.data.pool)
         .await
         .map_err(|e| format!("Failed to update shop template: {:?}", e))?;
+
+        #[derive(sqlx::FromRow)]
+        struct GuildTemplateShopGuildRow {
+            guild_id: String,
+        }
+
+        // Find all guilds with this template and dispatch an OnStartup event for all of them
+        let guilds: Vec<GuildTemplateShopGuildRow> = sqlx::query_as(
+            "SELECT guild_id FROM guild_templates WHERE name = $1 AND paused = false",
+        )
+        .bind(
+            silverpelt::templates::create_shop_template(
+                &data.name,
+                &data.version,
+            )
+        )
+        .fetch_all(&ctx.data.pool)
+        .await
+        .map_err(|e| format!("Failed to fetch guilds with this template: {:?}", e))?;
+
+        for guild in guilds {
+            let guild_id = match guild.guild_id.parse::<serenity::all::GuildId>() {
+                Ok(guild_id) => guild_id,
+                Err(e) => {
+                    continue;
+                }
+            };
+            // Dispatch a OnStartup event for the template
+            match AntiraidEvent::OnStartup(vec![data.name.to_string()])
+            .dispatch_to_template_worker_and_nowait(&ctx.data, guild_id, &template_dispatch_data())
+            .await {
+                Ok(_) => {},
+                Err(e) => {
+                    log::error!("Failed to dispatch OnStartup event: {:?}", e);
+                    // Continue to the next guild
+                    continue;
+                }
+            }
+        }
 
         Ok(entry)
     }
@@ -2356,28 +2447,71 @@ impl SettingDeleter<SettingsData> for GuildTemplateShopExecutor {
 
         let primary_key = primary_key.parse::<uuid::Uuid>().map_err(|e| format!("Failed to parse ID: {:?}", e))?;
 
-        let Some(row) = sqlx::query(
-            "SELECT id FROM template_shop WHERE owner_guild = $1 AND id = $2",
+        #[derive(sqlx::FromRow)]
+        struct GuildTemplateShopRow {
+            id: uuid::Uuid,
+            name: String,
+            version: String,
+        }
+
+        let row: GuildTemplateShopRow = sqlx::query_as(
+            "SELECT id, name, version FROM template_shop WHERE owner_guild = $1 AND id = $2",
         )
         .bind(ctx.scope.guild_id()?.to_string())
         .bind(primary_key)
         .fetch_optional(&ctx.data.pool)
         .await
         .map_err(|e| format!("Error while fetching shop template: {}", e))?
-        else {
-            return Err("Shop template not found when trying to delete it!".into());
-        };
-
-        let id: uuid::Uuid = row.try_get(0).map_err(|e| format!("Failed to get ID: {:?}", e))?;
+        .ok_or_else(|| "Shop template not found when trying to delete it!".to_string())?;
 
         sqlx::query(
             "DELETE FROM template_shop WHERE owner_guild = $1 AND id = $2",
         )
         .bind(ctx.scope.guild_id()?.to_string())
-        .bind(id)
+        .bind(row.id)
         .execute(&ctx.data.pool)
         .await
         .map_err(|e| format!("Failed to delete shop template: {:?}", e))?;
+
+        // Dispatch a OnStartup event for the template
+        #[derive(sqlx::FromRow)]
+        struct GuildTemplateShopGuildRow {
+            guild_id: String,
+        }
+
+        // Find all guilds with this template and dispatch an OnStartup event for all of them
+        let guilds: Vec<GuildTemplateShopGuildRow> = sqlx::query_as(
+            "SELECT guild_id FROM guild_templates WHERE name = $1 AND paused = false",
+        )
+        .bind(
+            silverpelt::templates::create_shop_template(
+                &row.name,
+                &row.version,
+            )
+        )
+        .fetch_all(&ctx.data.pool)
+        .await
+        .map_err(|e| format!("Failed to fetch guilds with this template: {:?}", e))?;
+
+        for guild in guilds {
+            let guild_id = match guild.guild_id.parse::<serenity::all::GuildId>() {
+                Ok(guild_id) => guild_id,
+                Err(e) => {
+                    continue;
+                }
+            };
+            // Dispatch a OnStartup event for the template
+            match AntiraidEvent::OnStartup(vec![row.name.to_string()])
+            .dispatch_to_template_worker_and_nowait(&ctx.data, guild_id, &template_dispatch_data())
+            .await {
+                Ok(_) => {},
+                Err(e) => {
+                    log::error!("Failed to dispatch OnStartup event: {:?}", e);
+                    // Continue to the next guild
+                    continue;
+                }
+            }
+        }
 
         Ok(())
     }
