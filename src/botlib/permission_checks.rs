@@ -80,12 +80,10 @@ pub async fn check_permissions(
         let top_role = member_roles.last().unwrap();
 
         return Err(
-            format!("You need the ``{}`` permission to use this command!
+            format!("You need the ``{perm_check_data.perm}`` permission to use this command!
             
-Please ask the server administrator to run ``/settings roles add role:{} perms:{}`` to give you this permission.", 
-            top_role, 
-            guild_id,
-            perm_check_data.perm).into()
+Please ask the server administrator to run ``/settings roles create role:{top_role} perms:{perm_check_data.perm}`` to give you this permission.", 
+            ).into()
         );
     }
 
