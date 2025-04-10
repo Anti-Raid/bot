@@ -800,6 +800,7 @@ async fn ban(
     user_cooldown = "5",
     required_bot_permissions = "BAN_MEMBERS | MANAGE_MESSAGES"
 )]
+#[allow(dead_code)]
 async fn tempban(
     ctx: Context<'_>,
     #[description = "The user to ban"] user: serenity::all::User,
@@ -812,6 +813,9 @@ async fn tempban(
     #[description = "The duration of the ban"] duration: String,
     #[description = "How many messages to prune using discords autopruner [dmd] (days)"] prune_dmd: Option<u8>,
 ) -> Result<(), Error> {
+    Err("This command is temporarily unavailable. We apologize for the inconvenience!".into())
+
+    /*
     let Some(guild_id) = ctx.guild_id() else {
         return Err("This command can only be used in a guild".into());
     };
@@ -969,7 +973,7 @@ async fn tempban(
         .edit(&ctx.http(), EditMessage::new().embed(embed))
         .await?;
 
-    Ok(())
+    Ok(())*/
 }
 
 /// Unbans a member from the server with optional purge/stinging abilities

@@ -43,7 +43,6 @@ pub static GUILD_ROLES: LazyLock<Setting<SettingsData>> = LazyLock::new(|| {
         id: "roles".to_string(),
         name: "Server Roles".to_string(),
         description: "Configure server roles permissions on AntiRaid".to_string(),
-        primary_key: "role_id".to_string(),
         columns: settings_wrap(vec![
             ar_settings::common_columns::guild_id("guild_id", "Guild ID", "The Guild ID"),
             Column {
@@ -56,6 +55,7 @@ pub static GUILD_ROLES: LazyLock<Setting<SettingsData>> = LazyLock::new(|| {
                     max_length: Some(64),
                     allowed_values: vec![],
                 }),
+                primary_key: true,
                 nullable: false,
                 suggestions: ColumnSuggestion::None {},
                 ignored_for: vec![],
@@ -71,6 +71,7 @@ pub static GUILD_ROLES: LazyLock<Setting<SettingsData>> = LazyLock::new(|| {
                     max_length: Some(64),
                     allowed_values: vec![],
                 }),
+                primary_key: false,
                 nullable: false,
                 suggestions: ColumnSuggestion::None {},
                 ignored_for: vec![],
@@ -81,6 +82,7 @@ pub static GUILD_ROLES: LazyLock<Setting<SettingsData>> = LazyLock::new(|| {
                 name: "Index".to_string(),
                 description: "Where in the role hierarchy should this role be on Anti-Raid for permission purposes. Note that a lower index implies higher on the hierarchy and vice versa".to_string(),
                 column_type: ColumnType::new_scalar(InnerColumnType::Integer {}),
+                primary_key: false,
                 nullable: true,
                 suggestions: ColumnSuggestion::None {},
                 ignored_for: vec![],
@@ -96,6 +98,7 @@ pub static GUILD_ROLES: LazyLock<Setting<SettingsData>> = LazyLock::new(|| {
                     max_length: Some(64),
                     allowed_values: vec![],
                 }),
+                primary_key: false,
                 nullable: true,
                 suggestions: ColumnSuggestion::None {},
                 ignored_for: vec![],
@@ -242,12 +245,12 @@ impl SettingDeleter<SettingsData> for GuildRolesExecutor {
     async fn delete<'a>(
         &self,
         ctx: &SettingsData,
-        primary_key: Value,
+        mut fields: indexmap::IndexMap<String, Value>,
     ) -> Result<(), Error> {
         check_perms(ctx, "guild_roles.delete".into()).await?;
 
-        let Value::String(primary_key) = primary_key else {
-            return Err("Could not parse primary key as string".into());
+        let Some(Value::String(primary_key)) = fields.swap_remove("role_id") else {
+            return Err("Could not parse role ID as a string (not a valid snowflake?)".into());
         };
 
         #[derive(sqlx::FromRow)]
@@ -582,7 +585,6 @@ pub static GUILD_MEMBERS: LazyLock<Setting<SettingsData>> = LazyLock::new(|| Set
     id: "guild_members".to_string(),
     name: "Server Members".to_string(),
     description: "Manage server members".to_string(),
-    primary_key: "user_id".to_string(),
     columns: settings_wrap(vec![
         ar_settings::common_columns::guild_id("guild_id", "Guild ID", "The Guild ID"),
         Column {
@@ -595,6 +597,7 @@ pub static GUILD_MEMBERS: LazyLock<Setting<SettingsData>> = LazyLock::new(|| Set
                 max_length: Some(64),
                 allowed_values: vec![],
             }),
+            primary_key: true,
             nullable: false,
             suggestions: ColumnSuggestion::None {},
             ignored_for: vec![OperationType::Update],
@@ -612,6 +615,7 @@ pub static GUILD_MEMBERS: LazyLock<Setting<SettingsData>> = LazyLock::new(|| Set
                 max_length: Some(64),
                 allowed_values: vec![],
             }),
+            primary_key: false,
             nullable: false,
             suggestions: ColumnSuggestion::None {},
             ignored_for: vec![],
@@ -622,6 +626,7 @@ pub static GUILD_MEMBERS: LazyLock<Setting<SettingsData>> = LazyLock::new(|| Set
             name: "Public".to_string(),
             description: "Whether the member is public or not".to_string(),
             column_type: ColumnType::new_scalar(InnerColumnType::Boolean {}),
+            primary_key: false,
             nullable: false,
             suggestions: ColumnSuggestion::None {},
             ignored_for: vec![],
@@ -984,7 +989,7 @@ impl SettingDeleter<SettingsData> for GuildMembersExecutor {
     async fn delete<'a>(
         &self,
         ctx: &SettingsData,
-        primary_key: Value,
+        mut fields: indexmap::IndexMap<String, Value>,
     ) -> Result<(), Error> {
         check_perms(ctx, "guild_members.delete".into()).await?;
 
@@ -994,6 +999,10 @@ impl SettingDeleter<SettingsData> for GuildMembersExecutor {
             perm_overrides: Vec<String>,
             public: bool,
         }
+
+        let Some(Value::String(primary_key)) = fields.swap_remove("user_id") else {
+            return Err("Could not parse user ID as a string (not a valid snowflake?)".into());
+        };
 
         let Some(row): Option<GuildMembersRow> = sqlx::query_as("SELECT user_id, perm_overrides, public FROM guild_members WHERE guild_id = $1 AND user_id = $2")
         .bind(ctx.scope.guild_id()?.to_string())
@@ -1031,7 +1040,6 @@ pub static GUILD_TEMPLATES: LazyLock<Setting<SettingsData>> = LazyLock::new(|| {
         id: "scripts".to_string(),
         name: "Scripts".to_string(),
         description: "Configure your servers' custom scripts.".to_string(),
-        primary_key: "name".to_string(),
         columns: settings_wrap(vec![
             ar_settings::common_columns::guild_id("guild_id", "Guild ID", "The Guild ID"),
             Column {
@@ -1044,6 +1052,7 @@ pub static GUILD_TEMPLATES: LazyLock<Setting<SettingsData>> = LazyLock::new(|| {
                     max_length: Some(64),
                     allowed_values: vec![],
                 }),
+                primary_key: true,
                 nullable: false,
                 suggestions: ColumnSuggestion::None {},
                 ignored_for: vec![],
@@ -1059,6 +1068,7 @@ pub static GUILD_TEMPLATES: LazyLock<Setting<SettingsData>> = LazyLock::new(|| {
                     max_length: Some(64),
                     allowed_values: vec!["luau".to_string()],
                 }),
+                primary_key: false,
                 nullable: false,
                 suggestions: ColumnSuggestion::None {},
                 ignored_for: vec![],
@@ -1072,6 +1082,7 @@ pub static GUILD_TEMPLATES: LazyLock<Setting<SettingsData>> = LazyLock::new(|| {
                     kind: "template".to_string(),
                     max_bytes: Some(1024 * 1024 * 5), // 5MB
                 }),
+                primary_key: false,
                 nullable: false,
                 suggestions: ColumnSuggestion::None {},
                 ignored_for: vec![],
@@ -1082,6 +1093,7 @@ pub static GUILD_TEMPLATES: LazyLock<Setting<SettingsData>> = LazyLock::new(|| {
                 name: "Paused".to_string(),
                 description: "Whether the script is paused or not".to_string(),
                 column_type: ColumnType::new_scalar(InnerColumnType::Boolean {}),
+                primary_key: false,
                 nullable: false,
                 suggestions: ColumnSuggestion::None {},
                 ignored_for: vec![],
@@ -1106,6 +1118,7 @@ pub static GUILD_TEMPLATES: LazyLock<Setting<SettingsData>> = LazyLock::new(|| {
                     },
                     kind: "normal".to_string()
                 }),
+                primary_key: false,
                 nullable: true,
                 suggestions: ColumnSuggestion::None {},
                 ignored_for: vec![],
@@ -1116,6 +1129,7 @@ pub static GUILD_TEMPLATES: LazyLock<Setting<SettingsData>> = LazyLock::new(|| {
                 name: "Capabilities".to_string(),
                 description: "The capabilities the script will have.".to_string(),
                 column_type: ColumnType::new_array(InnerColumnType::String { min_length: None, max_length: None, allowed_values: vec![], kind: "normal".to_string() }),
+                primary_key: false,
                 nullable: true,
                 suggestions: ColumnSuggestion::Static {
                     suggestions: vec![
@@ -1135,6 +1149,7 @@ pub static GUILD_TEMPLATES: LazyLock<Setting<SettingsData>> = LazyLock::new(|| {
                     max_length: None,
                     allowed_values: vec![],
                 }),
+                primary_key: false,
                 nullable: true,
                 suggestions: ColumnSuggestion::None {},
                 ignored_for: vec![],
@@ -1578,11 +1593,11 @@ impl SettingDeleter<SettingsData> for GuildTemplateExecutor {
     async fn delete<'a>(
         &self,
         ctx: &SettingsData,
-        primary_key: Value,
+        mut fields: indexmap::IndexMap<String, Value>,
     ) -> Result<(), Error> {
         check_perms(ctx, "guild_templates.delete".into()).await?;
 
-        let Value::String(primary_key) = primary_key else {
+        let Some(Value::String(primary_key)) = fields.swap_remove("name") else {
             return Err("Invalid primary key".into());
         };
 
@@ -1619,7 +1634,6 @@ pub static GUILD_TEMPLATES_KV: LazyLock<Setting<SettingsData>> = LazyLock::new(|
     id: "script_kv".to_string(),
     name: "Scripts (key-value db)".to_string(),
     description: "Key-value database available to scripts on this server".to_string(),
-    primary_key: "key".to_string(),
     columns: settings_wrap(vec![
         ar_settings::common_columns::guild_id("guild_id", "Guild ID", "The Guild ID"),
         Column {
@@ -1632,6 +1646,23 @@ pub static GUILD_TEMPLATES_KV: LazyLock<Setting<SettingsData>> = LazyLock::new(|
                 max_length: Some(silverpelt::templates::LuaKVConstraints::default().max_key_length),
                 allowed_values: vec![],
             }),
+            primary_key: true,
+            nullable: false,
+            suggestions: ColumnSuggestion::None {},
+            ignored_for: vec![],
+            secret: false,
+        },
+        Column {
+            id: "scope".to_string(),
+            name: "Scope".to_string(),
+            description: "Scope of the key. 'unscoped' is default if unset".to_string(),
+            column_type: ColumnType::new_scalar(InnerColumnType::String {
+                kind: "normal".to_string(),
+                min_length: None,
+                max_length: Some(silverpelt::templates::LuaKVConstraints::default().max_key_length),
+                allowed_values: vec![],
+            }),
+            primary_key: true,
             nullable: false,
             suggestions: ColumnSuggestion::None {},
             ignored_for: vec![],
@@ -1645,6 +1676,7 @@ pub static GUILD_TEMPLATES_KV: LazyLock<Setting<SettingsData>> = LazyLock::new(|
                 kind: "kv_value".to_string(),
                 max_bytes: Some(silverpelt::templates::LuaKVConstraints::default().max_value_bytes),
             }),
+            primary_key: false,
             nullable: true,
             suggestions: ColumnSuggestion::None {},
             ignored_for: vec![],
@@ -1671,13 +1703,14 @@ impl SettingView<SettingsData> for GuildTemplatesKVExecutor {
 
         #[derive(sqlx::FromRow)]
         struct GuildTemplatesKVRow {
+            scope: String,
             key: String,
             value: Option<Value>,
             created_at: chrono::DateTime<chrono::Utc>,
             last_updated_at: chrono::DateTime<chrono::Utc>,
         }
 
-        let rows: Vec<GuildTemplatesKVRow> = sqlx::query_as("SELECT key, value, created_at, last_updated_at FROM guild_templates_kv WHERE guild_id = $1")
+        let rows: Vec<GuildTemplatesKVRow> = sqlx::query_as("SELECT scope, key, value, created_at, last_updated_at FROM guild_templates_kv WHERE guild_id = $1")
         .bind(context.scope.guild_id()?.to_string())
         .fetch_all(&context.data.pool)
         .await
@@ -1688,6 +1721,7 @@ impl SettingView<SettingsData> for GuildTemplatesKVExecutor {
         for row in rows {
             let map = indexmap::indexmap! {
                 "guild_id".to_string() => Value::String(context.scope.guild_id()?.to_string()),
+                "scope".to_string() => Value::String(row.scope),
                 "key".to_string() => Value::String(row.key),
                 "value".to_string() => row.value.unwrap_or(Value::Null),
                 "created_at".to_string() => Value::String(row.created_at.to_string()),
@@ -1821,11 +1855,11 @@ impl SettingDeleter<SettingsData> for GuildTemplatesKVExecutor {
     async fn delete<'a>(
         &self,
         ctx: &SettingsData,
-        primary_key: Value,
+        mut fields: indexmap::IndexMap<String, Value>,
     ) -> Result<(), Error> {
         check_perms(ctx, "guild_templates_kv.delete".into()).await?;
 
-        let Value::String(primary_key) = primary_key else {
+        let Some(Value::String(primary_key)) = fields.swap_remove("key") else {
             return Err("Invalid primary key".into());
         };
 
@@ -1849,14 +1883,14 @@ impl SettingDeleter<SettingsData> for GuildTemplatesKVExecutor {
             "DELETE FROM guild_templates_kv WHERE guild_id = $1 AND key = $2",
         )
         .bind(ctx.scope.guild_id()?.to_string())
-        .bind(primary_key.to_string())
+        .bind(&primary_key)
         .execute(&ctx.data.pool)
         .await
         .map_err(|e| format!("Failed to delete kv: {:?}", e))?;
 
         // Dispatch a ExternalKeyUpdate event for the template
         AntiraidEvent::ExternalKeyUpdate(ExternalKeyUpdateEventData {
-            key_modified: primary_key.to_string(),
+            key_modified: primary_key,
             author: ctx.scope.user_id()?,
             action: ExternalKeyUpdateEventDataAction::Delete
         })
@@ -1873,7 +1907,6 @@ pub static GUILD_TEMPLATE_SHOP: LazyLock<Setting<SettingsData>> = LazyLock::new(
         id: "script_shop".to_string(),
         name: "Created/Published Scripts".to_string(),
         description: "Publish new scripts to the shop that can be used by any other server".to_string(),
-        primary_key: "id".to_string(),
         columns: settings_wrap(vec![
             Column {
                 id: "id".to_string(),
@@ -1885,6 +1918,7 @@ pub static GUILD_TEMPLATE_SHOP: LazyLock<Setting<SettingsData>> = LazyLock::new(
                     allowed_values: vec![],
                     kind: "uuid".to_string(),
                 }),
+                primary_key: true,
                 nullable: false,
                 suggestions: ColumnSuggestion::None {},
                 ignored_for: vec![OperationType::Create],
@@ -1900,6 +1934,7 @@ pub static GUILD_TEMPLATE_SHOP: LazyLock<Setting<SettingsData>> = LazyLock::new(
                     max_length: Some(64),
                     allowed_values: vec![],
                 }),
+                primary_key: false,
                 nullable: false,
                 suggestions: ColumnSuggestion::None {},
                 ignored_for: vec![OperationType::Update],
@@ -1915,6 +1950,7 @@ pub static GUILD_TEMPLATE_SHOP: LazyLock<Setting<SettingsData>> = LazyLock::new(
                     max_length: Some(64),
                     allowed_values: vec![],
                 }),
+                primary_key: false,
                 nullable: false,
                 suggestions: ColumnSuggestion::None {},
                 ignored_for: vec![],
@@ -1930,6 +1966,7 @@ pub static GUILD_TEMPLATE_SHOP: LazyLock<Setting<SettingsData>> = LazyLock::new(
                     max_length: Some(64),
                     allowed_values: vec!["luau".to_string()],
                 }),
+                primary_key: false,
                 nullable: false,
                 suggestions: ColumnSuggestion::None {},
                 ignored_for: vec![OperationType::Update],
@@ -1945,6 +1982,7 @@ pub static GUILD_TEMPLATE_SHOP: LazyLock<Setting<SettingsData>> = LazyLock::new(
                     max_length: Some(64),
                     allowed_values: vec![],
                 }),
+                primary_key: false,
                 nullable: false,
                 suggestions: ColumnSuggestion::None {},
                 ignored_for: vec![OperationType::Update],
@@ -1960,6 +1998,7 @@ pub static GUILD_TEMPLATE_SHOP: LazyLock<Setting<SettingsData>> = LazyLock::new(
                     max_length: Some(4096),
                     allowed_values: vec![],
                 }),
+                primary_key: false,
                 nullable: false,
                 suggestions: ColumnSuggestion::None {},
                 ignored_for: vec![],
@@ -1973,6 +2012,7 @@ pub static GUILD_TEMPLATE_SHOP: LazyLock<Setting<SettingsData>> = LazyLock::new(
                     kind: "template".to_string(),
                     max_bytes: Some(1024 * 1024 * 5), // 5MB
                 }),
+                primary_key: false,
                 nullable: false,
                 suggestions: ColumnSuggestion::None {},
                 ignored_for: vec![],
@@ -1997,6 +2037,7 @@ pub static GUILD_TEMPLATE_SHOP: LazyLock<Setting<SettingsData>> = LazyLock::new(
                         vec
                     },
                 }),
+                primary_key: false,
                 nullable: false,
                 suggestions: ColumnSuggestion::None {},
                 ignored_for: vec![],
@@ -2007,6 +2048,7 @@ pub static GUILD_TEMPLATE_SHOP: LazyLock<Setting<SettingsData>> = LazyLock::new(
                 name: "Capabilities".to_string(),
                 description: "The capabilities the script needs to perform its full functionality.".to_string(),
                 column_type: ColumnType::new_array(InnerColumnType::String { min_length: None, max_length: None, allowed_values: vec![], kind: "normal".to_string() }),
+                primary_key: false,
                 nullable: true,
                 suggestions: ColumnSuggestion::Static {
                     suggestions: vec![
@@ -2026,6 +2068,7 @@ pub static GUILD_TEMPLATE_SHOP: LazyLock<Setting<SettingsData>> = LazyLock::new(
                     max_length: None,
                     allowed_values: vec!["public".to_string(), "hidden".to_string()],
                 }),
+                primary_key: false,
                 nullable: false,
                 suggestions: ColumnSuggestion::None {},
                 ignored_for: vec![],
@@ -2320,10 +2363,6 @@ impl SettingUpdater<SettingsData> for GuildTemplateShopExecutor {
             return Err("Missing or invalid field: `description`".into());
         };
 
-        let Some(Value::String(r#type)) = entry.get("type") else {
-            return Err("Missing or invalid field: `type`".into());
-        };
-
         let Some(content) = entry.get("content") else {
             return Err("Missing or invalid field: `content`".into());
         };
@@ -2411,7 +2450,7 @@ impl SettingUpdater<SettingsData> for GuildTemplateShopExecutor {
         for guild in guilds {
             let guild_id = match guild.guild_id.parse::<serenity::all::GuildId>() {
                 Ok(guild_id) => guild_id,
-                Err(e) => {
+                Err(_) => {
                     continue;
                 }
             };
@@ -2437,11 +2476,11 @@ impl SettingDeleter<SettingsData> for GuildTemplateShopExecutor {
     async fn delete<'a>(
         &self,
         ctx: &SettingsData,
-        primary_key: Value,
+        mut fields: indexmap::IndexMap<String, Value>,
     ) -> Result<(), Error> {
         check_perms(ctx, "guild_templates_shop.delete".into()).await?;
 
-        let Value::String(primary_key) = primary_key else {
+        let Some(Value::String(primary_key)) = fields.swap_remove("id") else {
             return Err("Missing or invalid field: `id`".into());
         };
 
@@ -2496,7 +2535,7 @@ impl SettingDeleter<SettingsData> for GuildTemplateShopExecutor {
         for guild in guilds {
             let guild_id = match guild.guild_id.parse::<serenity::all::GuildId>() {
                 Ok(guild_id) => guild_id,
-                Err(e) => {
+                Err(_) => {
                     continue;
                 }
             };
@@ -2522,7 +2561,6 @@ pub static GUILD_TEMPLATE_SHOP_PUBLIC_LIST: LazyLock<Setting<SettingsData>> = La
         id: "template_shop_public_list".to_string(),
         name: "Explore the shop!".to_string(),
         description: "Explore other templates published by other servers".to_string(),
-        primary_key: "id".to_string(),
         columns: settings_wrap(vec![
             Column {
                 id: "id".to_string(),
@@ -2534,6 +2572,7 @@ pub static GUILD_TEMPLATE_SHOP_PUBLIC_LIST: LazyLock<Setting<SettingsData>> = La
                     allowed_values: vec![],
                     kind: "uuid".to_string(),
                 }),
+                primary_key: true,
                 nullable: false,
                 suggestions: ColumnSuggestion::None {},
                 ignored_for: vec![],
@@ -2549,6 +2588,7 @@ pub static GUILD_TEMPLATE_SHOP_PUBLIC_LIST: LazyLock<Setting<SettingsData>> = La
                     max_length: Some(64),
                     allowed_values: vec![],
                 }),
+                primary_key: false,
                 nullable: false,
                 suggestions: ColumnSuggestion::None {},
                 ignored_for: vec![OperationType::Update],
@@ -2564,6 +2604,7 @@ pub static GUILD_TEMPLATE_SHOP_PUBLIC_LIST: LazyLock<Setting<SettingsData>> = La
                     max_length: Some(64),
                     allowed_values: vec![],
                 }),
+                primary_key: false,
                 nullable: false,
                 suggestions: ColumnSuggestion::None {},
                 ignored_for: vec![OperationType::Update],
@@ -2579,6 +2620,7 @@ pub static GUILD_TEMPLATE_SHOP_PUBLIC_LIST: LazyLock<Setting<SettingsData>> = La
                     max_length: Some(4096),
                     allowed_values: vec![],
                 }),
+                primary_key: false,
                 nullable: false,
                 suggestions: ColumnSuggestion::None {},
                 ignored_for: vec![],
@@ -2594,6 +2636,7 @@ pub static GUILD_TEMPLATE_SHOP_PUBLIC_LIST: LazyLock<Setting<SettingsData>> = La
                     max_length: None,
                     allowed_values: vec!["public".to_string(), "hidden".to_string()],
                 }),
+                primary_key: false,
                 nullable: false,
                 suggestions: ColumnSuggestion::None {},
                 ignored_for: vec![],
@@ -2664,17 +2707,20 @@ impl SettingView<SettingsData> for GuildTemplateShopPublicListExecutor {
 }
 
 pub static LOCKDOWN_SETTINGS: LazyLock<Setting<SettingsData>> = LazyLock::new(|| {
+    let mut gid_col = ar_settings::common_columns::guild_id(
+        "guild_id",
+        "Guild ID",
+        "Guild ID of the server in question",
+    );
+
+    gid_col.primary_key = true;
+
     Setting {
         id: "lockdown_guilds".to_string(),
         name: "Lockdown Settings".to_string(),
         description: "Setup standard lockdown settings for a server".to_string(),
-        primary_key: "guild_id".to_string(),
         columns: settings_wrap(vec![
-            ar_settings::common_columns::guild_id(
-                "guild_id",
-                "Guild ID",
-                "Guild ID of the server in question",
-            ),
+            gid_col,
             Column {
                 id: "member_roles".to_string(),
                 name: "Member Roles".to_string(),
@@ -2685,6 +2731,7 @@ pub static LOCKDOWN_SETTINGS: LazyLock<Setting<SettingsData>> = LazyLock::new(||
                     max_length: None,
                     allowed_values: vec![],
                 }),
+                primary_key: false,
                 nullable: false,
                 suggestions: ColumnSuggestion::None {},
                 ignored_for: vec![],
@@ -2695,6 +2742,7 @@ pub static LOCKDOWN_SETTINGS: LazyLock<Setting<SettingsData>> = LazyLock::new(||
                 name: "Require Correct Layout".to_string(),
                 description: "Whether or not a lockdown can proceed even without correct critical role permissions. May lead to partial lockdowns if disabled".to_string(),
                 column_type: ColumnType::new_scalar(InnerColumnType::Boolean {}),
+                primary_key: false,
                 nullable: false,
                 suggestions: ColumnSuggestion::None {},
                 ignored_for: vec![],
@@ -2853,7 +2901,7 @@ impl SettingDeleter<SettingsData> for LockdownSettingsExecutor {
     async fn delete<'a>(
         &self,
         context: &SettingsData,
-        _primary_key: Value,
+        _fields: indexmap::IndexMap<String, Value>,
     ) -> Result<(), Error> {
         check_perms(context,"lockdown_settings.delete".into()).await?;
 
@@ -2871,7 +2919,6 @@ pub static LOCKDOWNS: LazyLock<Setting<SettingsData>> = LazyLock::new(|| Setting
     id: "lockdowns".to_string(),
     name: "Lockdowns".to_string(),
     description: "Lockdowns".to_string(),
-    primary_key: "id".to_string(),
     columns: settings_wrap(vec![
         Column {
             id: "id".to_string(),
@@ -2883,6 +2930,7 @@ pub static LOCKDOWNS: LazyLock<Setting<SettingsData>> = LazyLock::new(|| Setting
                 allowed_values: vec![],
                 kind: "uuid".to_string(),
             }),
+            primary_key: true,
             nullable: false,
             suggestions: ColumnSuggestion::None {},
             ignored_for: vec![OperationType::Create],
@@ -2903,6 +2951,7 @@ pub static LOCKDOWNS: LazyLock<Setting<SettingsData>> = LazyLock::new(|| Setting
                 max_length: Some(256),
                 allowed_values: vec![],
             }),
+            primary_key: false,
             nullable: false,
             suggestions: ColumnSuggestion::None {},
             ignored_for: vec![],
@@ -2913,6 +2962,7 @@ pub static LOCKDOWNS: LazyLock<Setting<SettingsData>> = LazyLock::new(|| Setting
             name: "Data".to_string(),
             description: "The data stored of the lockdown.".to_string(),
             column_type: ColumnType::new_scalar(InnerColumnType::Json { max_bytes: None, kind: "normal".to_string() }),
+            primary_key: false,
             nullable: false,
             suggestions: ColumnSuggestion::None {},
             ignored_for: vec![OperationType::Create, OperationType::Update],
@@ -2928,6 +2978,7 @@ pub static LOCKDOWNS: LazyLock<Setting<SettingsData>> = LazyLock::new(|| Setting
                 max_length: Some(256),
                 allowed_values: vec![],
             }),
+            primary_key: false,
             nullable: false,
             suggestions: ColumnSuggestion::None {},
             ignored_for: vec![],
@@ -3066,11 +3117,11 @@ impl SettingDeleter<SettingsData> for LockdownExecutor {
     async fn delete<'a>(
         &self,
         context: &SettingsData,
-        primary_key: Value,
+        mut fields: indexmap::IndexMap<String, Value>,
     ) -> Result<(), Error> {
         check_perms(context,"lockdowns.delete".into()).await?;
                 
-        let Value::String(primary_key) = primary_key else {
+        let Some(Value::String(primary_key)) = fields.swap_remove("id") else {
             return Err("Missing or invalid field: `id`".into());
         };
 

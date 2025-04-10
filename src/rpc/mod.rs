@@ -342,19 +342,13 @@ pub(crate) async fn settings_operation(
             }
         }
         OperationType::Delete => {
-            let Some(pkey) = req.fields.get(&setting.primary_key) else {
-                return Json(CanonicalSettingsResult::Err {
-                    error: format!("Missing or invalid field: `{}`", setting.primary_key),
-                });
-            };
-
             match ar_settings::cfg::settings_delete(
                 &setting,
                 &crate::botlib::settings::settings_data(
                     serenity_context,
                     RequestScope::Guild((guild_id, user_id)),
                 ),
-                pkey.clone(),
+                req.fields
             )
             .await
             {
@@ -440,16 +434,10 @@ pub(crate) async fn settings_operation_anonymous(
             }
         }
         OperationType::Delete => {
-            let Some(pkey) = req.fields.get(&setting.primary_key) else {
-                return Json(CanonicalSettingsResult::Err {
-                    error: format!("Missing or invalid field: `{}`", setting.primary_key),
-                });
-            };
-
             match ar_settings::cfg::settings_delete(
                 &setting,
                 &crate::botlib::settings::settings_data(serenity_context, RequestScope::Anonymous),
-                pkey.clone(),
+                req.fields
             )
             .await
             {
