@@ -2380,6 +2380,10 @@ impl SettingUpdater<SettingsData> for GuildTemplateShopExecutor {
             return Err("Missing or invalid field: `description`".into());
         };
 
+        let Some(Value::String(typ)) = entry.get("type") else {
+            return Err("Missing or invalid field: `type`".into());
+        };
+
         let Some(content) = entry.get("content") else {
             return Err("Missing or invalid field: `content`".into());
         };
@@ -2390,10 +2394,6 @@ impl SettingUpdater<SettingsData> for GuildTemplateShopExecutor {
 
         let _: indexmap::IndexMap<String, Value> = serde_json::from_str(&string_form)   
             .map_err(|e| format!("Failed to parse content: {:?}", e))?;     
-
-        let Some(Value::String(r#type)) = entry.get("type") else {
-            return Err("Missing or invalid field: `type`".into());
-        };
 
         let events = match entry.get("events") {
             Some(Value::Array(events)) => 
@@ -2433,7 +2433,7 @@ impl SettingUpdater<SettingsData> for GuildTemplateShopExecutor {
             "UPDATE template_shop SET description = $1, type = $2, friendly_name = $3, last_updated_at = NOW(), last_updated_by = $4, events = $7, allowed_caps = $8, content = $9 WHERE owner_guild = $5 AND id = $6",
         )
         .bind(description)
-        .bind(r#type)
+        .bind(typ)
         .bind(friendly_name)
         .bind(ctx.scope.user_id()?.to_string())
         .bind(ctx.scope.guild_id()?.to_string())
@@ -2467,7 +2467,8 @@ impl SettingUpdater<SettingsData> for GuildTemplateShopExecutor {
         for guild in guilds {
             let guild_id = match guild.guild_id.parse::<serenity::all::GuildId>() {
                 Ok(guild_id) => guild_id,
-                Err(_) => {
+                Err(e) => {
+                    log::error!("Failed to parse guild id: {:?}", e);
                     continue;
                 }
             };
@@ -2552,7 +2553,8 @@ impl SettingDeleter<SettingsData> for GuildTemplateShopExecutor {
         for guild in guilds {
             let guild_id = match guild.guild_id.parse::<serenity::all::GuildId>() {
                 Ok(guild_id) => guild_id,
-                Err(_) => {
+                Err(e) => {
+                    log::error!("Failed to parse guild id {:?}", e);
                     continue;
                 }
             };
