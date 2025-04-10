@@ -801,6 +801,7 @@ async fn ban(
     required_bot_permissions = "BAN_MEMBERS | MANAGE_MESSAGES"
 )]
 #[allow(dead_code)]
+#[allow(unused_variables)]
 async fn tempban(
     ctx: Context<'_>,
     #[description = "The user to ban"] user: serenity::all::User,
