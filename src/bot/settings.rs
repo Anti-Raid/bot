@@ -1748,6 +1748,10 @@ impl SettingCreator<SettingsData> for GuildTemplatesKVExecutor {
             return Err("Missing or invalid field: `key`".into());
         };
 
+        let Some(Value::String(scope)) = entry.get("scope") else {
+            return Err("Missing or invalid field: `scope`".into());
+        };
+
         let total_count: i64 = sqlx::query(
             "SELECT COUNT(*) FROM guild_templates_kv WHERE guild_id = $1",
         )
@@ -1766,10 +1770,11 @@ impl SettingCreator<SettingsData> for GuildTemplatesKVExecutor {
         }
 
         let count = sqlx::query(
-            "SELECT COUNT(*) FROM guild_templates_kv WHERE guild_id = $1 AND key = $2",
+            "SELECT COUNT(*) FROM guild_templates_kv WHERE guild_id = $1 AND key = $2 AND scope = $3",
         )
         .bind(ctx.scope.guild_id()?.to_string())
         .bind(key)
+        .bind(scope)
         .fetch_one(&ctx.data.pool)
         .await
         .map_err(|e| format!("Failed to check if kv exists: {:?}", e))?
@@ -1786,11 +1791,12 @@ impl SettingCreator<SettingsData> for GuildTemplatesKVExecutor {
         };
 
         sqlx::query(
-            "INSERT INTO guild_templates_kv (guild_id, key, value, created_at, last_updated_at) VALUES ($1, $2, $3, NOW(), NOW())",
+            "INSERT INTO guild_templates_kv (guild_id, key, value, scope, created_at, last_updated_at) VALUES ($1, $2, $3, $4, NOW(), NOW())",
         )
         .bind(ctx.scope.guild_id()?.to_string())
         .bind(key)
         .bind(value)
+        .bind(scope)
         .execute(&ctx.data.pool)
         .await
         .map_err(|e| format!("Failed to insert kv: {:?}", e))?;
@@ -1822,16 +1828,21 @@ impl SettingUpdater<SettingsData> for GuildTemplatesKVExecutor {
             return Err("Missing or invalid field: `key`".into());
         };
 
+        let Some(Value::String(scope)) = entry.get("scope") else {
+            return Err("Missing or invalid field: `scope`".into());
+        };
+
         let Some(value) = entry.get("value") else {
             return Err("Missing or invalid field: `value`".into());
         };
 
         sqlx::query(
-            "UPDATE guild_templates_kv SET value = $1, last_updated_at = NOW() WHERE guild_id = $2 AND key = $3",
+            "UPDATE guild_templates_kv SET value = $1, last_updated_at = NOW() WHERE guild_id = $2 AND key = $3 AND scope = $4",
         )
         .bind(value)
         .bind(ctx.scope.guild_id()?.to_string())
         .bind(key)
+        .bind(scope)
         .execute(&ctx.data.pool)
         .await
         .map_err(|e| format!("Failed to update kv: {:?}", e))?;
@@ -1863,11 +1874,16 @@ impl SettingDeleter<SettingsData> for GuildTemplatesKVExecutor {
             return Err("Invalid primary key".into());
         };
 
+        let Some(Value::String(scope)) = fields.swap_remove("scope") else {
+            return Err("Invalid scope".into());
+        };
+
         if sqlx::query(
-            "SELECT COUNT(*) FROM guild_templates_kv WHERE guild_id = $1 AND key = $2",
+            "SELECT COUNT(*) FROM guild_templates_kv WHERE guild_id = $1 AND key = $2 AND scope = $3",
         )
         .bind(ctx.scope.guild_id()?.to_string())
         .bind(&primary_key)
+        .bind(&scope)
         .fetch_one(&ctx.data.pool)
         .await
         .map_err(|e| format!("Error while fetching kv: {}", e))?
@@ -1880,10 +1896,11 @@ impl SettingDeleter<SettingsData> for GuildTemplatesKVExecutor {
         };
 
         sqlx::query(
-            "DELETE FROM guild_templates_kv WHERE guild_id = $1 AND key = $2",
+            "DELETE FROM guild_templates_kv WHERE guild_id = $1 AND key = $2 AND scope = $3",
         )
         .bind(ctx.scope.guild_id()?.to_string())
         .bind(&primary_key)
+        .bind(&scope)
         .execute(&ctx.data.pool)
         .await
         .map_err(|e| format!("Failed to delete kv: {:?}", e))?;
