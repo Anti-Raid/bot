@@ -265,8 +265,8 @@ pub async fn backups_list(ctx: Context<'_>) -> Result<(), Error> {
             job.id,
             job.name,
             job.state,
-            job.created_at.and_utc().timestamp(),
-            job.created_at.and_utc().timestamp()
+            job.created_at.timestamp(),
+            job.created_at.timestamp()
         );
 
         let embed = poise::serenity_prelude::CreateEmbed::default().title(format!(
