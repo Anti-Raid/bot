@@ -1754,23 +1754,6 @@ impl SettingCreator<SettingsData> for GuildTemplatesKVExecutor {
             return Err("Missing or invalid field: `scope`".into());
         };
 
-        let total_count: i64 = sqlx::query(
-            "SELECT COUNT(*) FROM guild_templates_kv WHERE guild_id = $1",
-        )
-        .bind(ctx.scope.guild_id()?.to_string())
-        .fetch_one(&ctx.data.pool)
-        .await
-        .map_err(|e| format!("Failed to check total kv count: {:?}", e))?
-        .try_get::<Option<i64>, _>(0)
-        .map_err(|e| format!("Failed to get total kv count: {:?}", e))?
-        .unwrap_or_default();
-
-        if total_count
-            >= TryInto::<i64>::try_into(silverpelt::templates::LuaKVConstraints::default().max_keys)?
-        {
-            return Err("Max key-value pairs reached".into());
-        }
-
         let count = sqlx::query(
             "SELECT COUNT(*) FROM guild_templates_kv WHERE guild_id = $1 AND key = $2 AND scope = $3",
         )
