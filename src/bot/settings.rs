@@ -1106,7 +1106,13 @@ pub static GUILD_TEMPLATES: LazyLock<Setting<SettingsData>> = LazyLock::new(|| {
                 column_type: ColumnType::new_array(InnerColumnType::String { 
                     min_length: None, 
                     max_length: None, 
-                    allowed_values: {
+                    allowed_values: vec![],
+                    kind: "normal".to_string()
+                }),
+                primary_key: false,
+                nullable: true,
+                suggestions: ColumnSuggestion::Static {
+                    suggestions: {
                         let mut vec = AntiraidEvent::variant_names()
                         .iter()
                         .map(|x| x.to_string())
@@ -1115,12 +1121,8 @@ pub static GUILD_TEMPLATES: LazyLock<Setting<SettingsData>> = LazyLock::new(|| {
                         vec.extend(gwevent::core::event_list().iter().copied().map(|x| x.to_string()).collect::<Vec<String>>());
 
                         vec
-                    },
-                    kind: "normal".to_string()
-                }),
-                primary_key: false,
-                nullable: true,
-                suggestions: ColumnSuggestion::None {},
+                    }
+                },
                 ignored_for: vec![],
                 secret: false,
             },
