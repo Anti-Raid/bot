@@ -2,8 +2,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use serenity::all::{GuildChannel, Permissions, Role, RoleId};
 
-use crate::botlib::settings::SettingsData;
-
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct GuildChannelWithPermissions {
     pub user: Permissions,
@@ -74,6 +72,5 @@ pub struct CheckUserHasKittycatPermissionsRequest {
 #[derive(Serialize, Deserialize)]
 pub struct BotState {
     pub commands: Vec<crate::botlib::canonical::CanonicalCommand>,
-    pub settings: Vec<ar_settings::types::Setting<SettingsData>>,
     pub command_permissions: indexmap::IndexMap<String, Vec<String>>,
 }

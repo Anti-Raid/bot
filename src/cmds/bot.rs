@@ -43,11 +43,6 @@ async fn event_listener(
             }
 
             info!("Interaction received: {:?}", interaction.id());
-            crate::botlib::settings::execute_setting_interaction(
-                ctx.serenity_context.clone(),
-                interaction,
-            )
-            .await?;
         }
         FullEvent::Ready { data_about_bot } => {
             info!(

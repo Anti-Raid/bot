@@ -1,6 +1,6 @@
 use std::vec;
 
-use crate::{botlib::settings::SettingsData, config::CONFIG};
+use crate::config::CONFIG;
 
 mod backups;
 mod help;
@@ -8,7 +8,6 @@ mod load;
 mod lockdowns;
 mod moderation;
 mod ping;
-mod settings;
 mod stats;
 mod whois;
 
@@ -48,7 +47,7 @@ pub fn raw_commands() -> Vec<crate::Command> {
 }
 
 pub fn commands_to_register() -> Vec<serenity::all::CreateCommand<'static>> {
-    let mut commands_initial = poise::builtins::create_application_commands(&[
+    let commands_initial = poise::builtins::create_application_commands(&[
         help::help(),
         stats::stats(),
         ping::ping(),
@@ -58,25 +57,6 @@ pub fn commands_to_register() -> Vec<serenity::all::CreateCommand<'static>> {
         backups::backups(),
         load::load(),
     ]);
-
-    // Add auto-generated commands
-    let mut setting_command =
-        serenity::all::CreateCommand::new("settings").description("Configure settings on the bot");
-    for setting in config_options() {
-        setting_command = ar_settings::serenity::autogen::create_commands_from_setting_with_root(
-            &setting,
-            setting_command,
-        );
-    }
-
-    println!(
-        "{}",
-        serde_json::to_string_pretty(&setting_command).unwrap()
-    );
-
-    println!("{}", serde_json::to_string(&setting_command).unwrap());
-
-    commands_initial.push(setting_command);
 
     commands_initial
 }
@@ -263,19 +243,6 @@ pub fn commands_to_register() -> Vec<serenity::all::CreateCommand<'static>> {
         },
     ),
 ]*/
-
-pub fn config_options() -> Vec<ar_settings::types::Setting<SettingsData>> {
-    vec![
-        (*settings::GUILD_ROLES).clone(),
-        (*settings::GUILD_MEMBERS).clone(),
-        (*settings::GUILD_TEMPLATES).clone(),
-        (*settings::GUILD_TEMPLATES_KV).clone(),
-        (*settings::GUILD_TEMPLATE_SHOP).clone(),
-        (*settings::GUILD_TEMPLATE_SHOP_PUBLIC_LIST).clone(),
-        (*settings::LOCKDOWN_SETTINGS).clone(),
-        (*settings::LOCKDOWNS).clone(),
-    ]
-}
 
 /// Provides the config data involving template dispatch
 pub(crate) fn template_dispatch_data() -> silverpelt::ar_event::DispatchEventData {
