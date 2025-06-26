@@ -20,7 +20,7 @@ use jobserver::embed::{embed as embed_job, get_icon_of_state};
 use poise::CreateReply;
 use sandwich_driver::{guild, member_in_guild};
 use serenity::all::{
-    ChannelId, CreateEmbed, EditMember, EditMessage, GuildId, Mentionable, Timestamp, User, UserId,
+    ChannelId, CreateEmbed, EditMember, EditMessage, Mentionable, Timestamp, User, UserId,
 };
 use silverpelt::{
     ar_event::AntiraidEventOperations,
@@ -70,7 +70,6 @@ type MessagePruneOpts struct {
 #[allow(clippy::too_many_arguments)]
 fn create_message_prune_serde(
     user_id: Option<UserId>,
-    guild_id: GuildId,
     channels: &Option<String>,
     ignore_errors: Option<bool>,
     max_messages: Option<i32>,
@@ -101,7 +100,6 @@ fn create_message_prune_serde(
 
     Ok(serde_json::json!(
         {
-            "ServerID": guild_id.to_string(),
             "Options": {
                 "UserID": user_id,
                 "Channels": channels,
@@ -290,7 +288,6 @@ async fn prune(
     // If we're pruning messages, do that
     let prune_opts = create_message_prune_serde(
         user.as_ref().map(|u| u.id),
-        guild_id,
         &prune_channels,
         prune_ignore_errors,
         prune_max_messages,
@@ -374,7 +371,7 @@ async fn prune(
             create: true,
             execute: true,
             id: None,
-            user_id: author_user_id.to_string(),
+            guild_id: guild_id.to_string(),
         },
         &CONFIG.base_ports.jobserver_base_addr,
         CONFIG.base_ports.jobserver,

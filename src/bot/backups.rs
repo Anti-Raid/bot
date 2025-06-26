@@ -146,7 +146,6 @@ pub async fn backups_create(
 
     // Create backup
     let backup_args = serde_json::json!({
-        "ServerID": guild_id.to_string(),
         "Options": {
             "Channels": channels,
             "PerChannel": per_channel,
@@ -172,7 +171,7 @@ pub async fn backups_create(
             create: true,
             execute: true,
             id: None,
-            user_id: ctx.author().id.to_string(),
+            guild_id: guild_id.to_string(),
         },
         &CONFIG.base_ports.jobserver_base_addr,
         CONFIG.base_ports.jobserver,
@@ -579,7 +578,6 @@ pub async fn backups_list(ctx: Context<'_>) -> Result<(), Error> {
                     .await?;
 
                 let json = serde_json::json!({
-                    "ServerID": guild_id.to_string(),
                     "Options": {
                         "IgnoreRestoreErrors": false,
                         "BackupSource": url,
@@ -598,7 +596,7 @@ pub async fn backups_list(ctx: Context<'_>) -> Result<(), Error> {
                         create: true,
                         execute: true,
                         id: None,
-                        user_id: ctx.author().id.to_string(),
+                        guild_id: guild_id.to_string(),
                     },
                     &CONFIG.base_ports.jobserver_base_addr,
                     CONFIG.base_ports.jobserver,
@@ -747,42 +745,15 @@ pub async fn backups_list(ctx: Context<'_>) -> Result<(), Error> {
 
                         let mut status = Vec::new();
 
-                        match job.delete_from_storage(&data.object_store).await {
+                        match job.delete(&data.pool, &data.object_store).await {
                             Ok(_) => {
-                                status.push(":white_check_mark: Successfully deleted the backup from storage".to_string());
+                                status.push(
+                                    ":white_check_mark: Successfully deleted the backup"
+                                        .to_string(),
+                                );
                             }
                             Err(e) => {
-                                status.push(format!(
-                                    ":x: Failed to delete the backup from storage: {}",
-                                    e
-                                ));
-                            }
-                        };
-
-                        if let Err(e) = confirm_item
-                            .edit_response(
-                                &ctx.serenity_context().http,
-                                serenity::all::EditInteractionResponse::default().embed(
-                                    CreateEmbed::default()
-                                        .title("Deleting Backup")
-                                        .description(status.join("\n")),
-                                ),
-                            )
-                            .await
-                        {
-                            log::error!("Failed to edit message: {}", e);
-                        }
-
-                        // Lastly deleting the job from the database
-                        match job.delete_from_db(&data.pool).await {
-                            Ok(_) => {
-                                status.push(":white_check_mark: Successfully deleted the backup from database".to_string());
-                            }
-                            Err(e) => {
-                                status.push(format!(
-                                    ":x: Failed to delete the backup from database: {}",
-                                    e
-                                ));
+                                status.push(format!(":x: Failed to delete the backup: {}", e));
                             }
                         };
 
@@ -932,46 +903,13 @@ pub async fn backups_delete(ctx: Context<'_>, id: String) -> Result<(), Error> {
             let mut status = Vec::new();
 
             let data = &ctx.data();
-            match job.delete_from_storage(&data.object_store).await {
+            match job.delete(&data.pool, &data.object_store).await {
                 Ok(_) => {
-                    status.push(
-                        ":white_check_mark: Successfully deleted the backup from storage"
-                            .to_string(),
-                    );
+                    status.push(":white_check_mark: Successfully deleted the backup".to_string());
                 }
                 Err(e) => {
                     status.push(format!(
                         ":x: Failed to delete the backup from storage: {}",
-                        e
-                    ));
-                }
-            };
-
-            if let Err(e) = confirm_item
-                .edit_response(
-                    &ctx.serenity_context().http,
-                    serenity::all::EditInteractionResponse::default().embed(
-                        CreateEmbed::default()
-                            .title("Deleting Backup")
-                            .description(status.join("\n")),
-                    ),
-                )
-                .await
-            {
-                log::error!("Failed to edit message: {}", e);
-            }
-
-            // Lastly deleting the job from the database
-            match job.delete_from_db(&ctx.data().pool).await {
-                Ok(_) => {
-                    status.push(
-                        ":white_check_mark: Successfully deleted the backup from database"
-                            .to_string(),
-                    );
-                }
-                Err(e) => {
-                    status.push(format!(
-                        ":x: Failed to delete the backup from database: {}",
                         e
                     ));
                 }
@@ -1175,7 +1113,6 @@ pub async fn backups_restore(
         .await?;
 
     let json = serde_json::json!({
-        "ServerID": ctx.guild_id().unwrap().to_string(),
         "Options": {
             "IgnoreRestoreErrors": ignore_restore_errors.unwrap_or(false),
             "ProtectedChannels": protected_channels,
@@ -1196,7 +1133,7 @@ pub async fn backups_restore(
             create: true,
             execute: true,
             id: None,
-            user_id: ctx.author().id.to_string(),
+            guild_id: ctx.guild_id().unwrap().to_string(),
         },
         &CONFIG.base_ports.jobserver_base_addr,
         CONFIG.base_ports.jobserver,
